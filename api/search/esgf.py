@@ -1,6 +1,10 @@
-import pyesgf.search
 from api.settings import default_settings
-from api.search.provider import BaseSearchProvider, DatasetSearchResults
+from api.search.provider import BaseSearchProvider, DatasetSearchResults, Dataset
+import requests
+from urllib.parse import urlencode
+from typing import List, Dict, Any
+import itertools
+import dask.delayed
 
 NATURAL_LANGUAGE_PROCESSING_CONTEXT = """
 Split the given input text into key search terms and separate them with `AND`. 
@@ -34,6 +38,7 @@ class ESGFProvider(BaseSearchProvider):
         self, search_query: str, page: int
     ) -> DatasetSearchResults:
         query_string = self.process_natural_language(search_query)
+        print(query_string)
         return self.run_esgf_query(query_string, page)
 
     def build_natural_language_prompt(self, search_query: str) -> str:
@@ -56,35 +61,65 @@ class ESGFProvider(BaseSearchProvider):
             query = query[1:-1]
         return query.replace('"', '\\"')
 
-    def run_esgf_query(
-        self, query_string: str, page: int, node_url: str = "", facets: str = ""
-    ) -> DatasetSearchResults:
-        if page < 1:
-            return ["Invalid page."]
-        conn = pyesgf.search.SearchConnection(
-            node_url or default_settings.esgf_url, distrib=True
+    def _extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
+        dataset_id = dataset["id"]
+        print(dataset_id)
+        params = urlencode(
+            {
+                "type": "File",
+                "format": "application/solr+json",
+                "dataset_id": dataset_id,
+            }
         )
-        print("running esgf query with string '{}'".format(query_string))
-        query_string += "&sort=true"
-        context = conn.new_context(
-            project="CMIP6",
-            query=query_string,
-            facets=facets or default_settings.default_facets,
-            latest=True,
+        full_url = f"{default_settings.esgf_url}/search?{params}"
+        r = requests.get(full_url)
+        response = r.json()
+        if r.status_code != 200:
+            raise ConnectionError(
+                f"Failed to extract files from dataset via file search: {full_url} {response}"
+            )
+        files = response["response"]["docs"]
+        if len(files) == 0:
+            raise ConnectionError(
+                f"Failed to extract files from dataset: empty list {full_url}"
+            )
+
+        # file url responses are lists of strings with their protocols separated by |
+        # e.x. https://esgf-node.example|mimetype|OPENDAP
+        opendap_urls = [
+            url.split("|")[0]
+            for url in itertools.chain.from_iterable([f["url"] for f in files])
+            if "OPENDAP" in url
+        ]
+        return opendap_urls
+
+    def run_esgf_query(self, query_string: str, page: int) -> DatasetSearchResults:
+        encoded_string = urlencode(
+            {
+                "query": query_string,
+                "project": "CMIP6",
+                "fields": "*",
+                "latest": "true",
+                "sort": "true",
+                "limit": f"{default_settings.entries_per_page}",
+                "offset": "{}".format(default_settings.entries_per_page * page),
+                "format": "application/solr+json",
+            }
         )
 
-        slice_start = default_settings.entries_per_page * page
-        slice_end = slice_start + default_settings.entries_per_page
-
-        # context.search()[start:end] doesn't work due to overloading for caching in library
-        datasets = [
-            context.search()[i]
-            for i in range(slice_start, min(slice_end, context.hit_count))
-        ]
-
-        files_list = [
-            [f.opendap_url for f in files]
-            for files in [d.file_context().search() for d in datasets]
-        ]
-
-        return files_list
+        full_url = f"{default_settings.esgf_url}/search?{encoded_string}"
+        r = requests.get(full_url)
+        response = r.json()
+        if r.status_code != 200:
+            raise ConnectionError(
+                f"Failed to search against ESGF node: {full_url} {r.status_code} {response}"
+            )
+        # parallel over datasets, but delay fetching url until needed
+        return dask.compute(
+            [
+                dask.delayed(Dataset)(
+                    dataset, dask.delayed(self._extract_files_from_dataset)(dataset)
+                )
+                for dataset in response["response"]["docs"]
+            ]
+        )[0]

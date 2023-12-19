@@ -6,7 +6,7 @@ import os
 class Settings(BaseSettings):
     esgf_url: str = Field("https://esgf-node.llnl.gov/esg-search")
     default_facets: str = Field("project,experiment_family")
-    entries_per_page: int = 5
+    entries_per_page: int = 20
 
 
 default_settings = Settings()
