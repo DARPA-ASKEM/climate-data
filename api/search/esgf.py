@@ -4,7 +4,7 @@ import requests
 from urllib.parse import urlencode
 from typing import List, Dict, Any
 import itertools
-import dask.delayed
+import dask
 
 NATURAL_LANGUAGE_PROCESSING_CONTEXT = """
 Split the given input text into key search terms and separate them with `AND`. 
@@ -12,18 +12,19 @@ Surround measures of distance in escaped double quotes.
 
 Respond according to the given examples provided in a mapping.
 
-"6hr 100 km air_temperature" => "6hr AND  \"100 km\" AND air_temperature"
+"6hr 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
+"6 hours 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
+"6 hour 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
+"6hr 100km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
 "day experiment_name 200 km historical" => "day AND experiment_name AND \"200 km\" AND historical"
+"daily humidity 200km historical" => "day AND humidity AND \"200 km\" AND historical"
+"1 day 100km experiment_name" => "day AND \"100 km\" AND experiment_name"
 "20 km 3hr piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
+"20km 3hr piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
+"20 km 3 hours piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
+"20km three hours piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
 
 Do not provide any other words except the converted search terms.
-
-Additionally, convert measures of duration according to the following formatting examples.
-
-"3 hours" => "3hr"
-"One day" => "day"
-"1 day" => "day"
-"6 hours" => "6hr"
 """
 
 
@@ -39,6 +40,7 @@ class ESGFProvider(BaseSearchProvider):
     ) -> DatasetSearchResults:
         query_string = self.process_natural_language(search_query)
         print(query_string)
+        print(urlencode({"query": query_string}))
         return self.run_esgf_query(query_string, page)
 
     def build_natural_language_prompt(self, search_query: str) -> str:
@@ -59,11 +61,10 @@ class ESGFProvider(BaseSearchProvider):
         query = response.choices[0].message.content
         if query[0] == '"' and query[-1] == '"':
             query = query[1:-1]
-        return query.replace('"', '\\"')
+        return query  # .replace('"', '\\"')
 
     def _extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
         dataset_id = dataset["id"]
-        print(dataset_id)
         params = urlencode(
             {
                 "type": "File",

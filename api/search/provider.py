@@ -16,5 +16,5 @@ DatasetSearchResults = List[Dataset]
 
 
 class BaseSearchProvider:
-    def search(query: str, page: int) -> DatasetSearchResults:
-        pass
+    def search(self, query: str, page: int) -> DatasetSearchResults:
+        return []
