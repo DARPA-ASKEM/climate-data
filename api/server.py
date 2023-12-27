@@ -1,16 +1,16 @@
 from fastapi import FastAPI
 from api.search.esgf import ESGFProvider
-from api.search.provider import BaseSearchProvider, DatasetSearchResults
-from api.process import get_dataset_sizes
 from openai import OpenAI
-import dask
+
+# 6hr between march 8 1800 and july 10 1999 historical atmospheric_co2 piControl 2x2
 
 app = FastAPI(docs_url="/")
 client = OpenAI()
 
+esgf = ESGFProvider(client)
+
 
 @app.get("/search/esgf")
 async def esgf_search(query: str = "", page: int = 1):
-    esgf = ESGFProvider(client)
     datasets = esgf.search(query, page)
     return {"results": datasets}

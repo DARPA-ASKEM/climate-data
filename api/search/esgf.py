@@ -5,42 +5,95 @@ from urllib.parse import urlencode
 from typing import List, Dict, Any
 import itertools
 import dask
+from openai import OpenAI
+from numpy import dot
+from numpy.linalg import norm
+import json
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import pickle
 
 NATURAL_LANGUAGE_PROCESSING_CONTEXT = """
-Split the given input text into key search terms and separate them with `AND`. 
-Surround measures of distance in escaped double quotes. 
+You are a tool to extract search terms by category from a given search request. 
 
-Respond according to the given examples provided in a mapping.
+The given fields are: frequency, nominal_resolution, lower_time_bound, upper_time_bound, and description.
 
-"6hr 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
-"6 hours 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
-"6 hour 100 km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
-"6hr 100km air_temperature" => "6hr AND \"100 km\" AND air_temperature"
-"day experiment_name 200 km historical" => "day AND experiment_name AND \"200 km\" AND historical"
-"daily humidity 200km historical" => "day AND humidity AND \"200 km\" AND historical"
-"1 day 100km experiment_name" => "day AND \"100 km\" AND experiment_name"
-"20 km 3hr piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
-"20km 3hr piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
-"20 km 3 hours piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
-"20km three hours piControl nRoot" => "\"20 km\" AND 3hr AND piControl AND nRoot" 
+The definitions of the fields are as follows. 
 
-Do not provide any other words except the converted search terms.
+frequency is a duration. 
+Possible example values for frequency values are: 6 hours, 6hrs, 3hr, daily, day, yearly, 12 hours, 12 hr
+
+nominal_resolution is a measure of distance. 
+Possible example values for resolution are: 100 km, 100km, 200km, 200 km, 2x2 degrees, 1x1 degrees, 1x1, 2x2, 20000 km
+
+lower_time_bound and upper_time_bound are measures of time. 
+When extracted from user input, convert them to UTC ISO 8601 format.
+Possible example values include:
+
+"after 2022" = lower_time_bound: 2022-00-00T00:00:00Z
+"between march 2021 and april 2023" = lower_time_bound: 2021-03-00T00:00:00Z ; upper_time_bound: 2023-04-00T00:00:00Z
+"before september 1995" = upper_time_bound: 1995-09-00T00:00:00Z
+
+description is a text field and contains all other unprocessed information. 
+
+Return the fields as a JSON object and include no other information. 
+
+Examples of full processing are as follows. 
+
+Input:
+100km before 2023 daily air temperature
+
+Output:
+{
+    "frequency": "daily",
+    "nominal_resolution": "100km",
+    "upper_time_bound": "2023-00-00T00:00:00Z",
+    "description": "air temperature"
+}
+
+Input: 2x2 degree relative humidity between june 1997 and july 1999 6hr
+
+Output:
+{
+    "frequency": "6hr",
+    "nominal_resolution": "2x2 degree",
+    "lower_time_bound": "1997-06-00T00:00:00Z",
+    "upper_time_bound": "1999-07-00T00:00:00Z",
+    "description": "relative humidity"
+}
 """
 
 
 class ESGFProvider(BaseSearchProvider):
     def __init__(self, openai_client):
-        self.client = openai_client
+        print("initializing esgf search provider")
+        self.client: OpenAI = openai_client
+        self.embeddings = {}
+
+    def initialize_embeddings(self):
+        self.get_cmip_embeddings_with_cache()
 
     def search(self, query: str, page: int) -> DatasetSearchResults:
+        if len(self.embeddings.keys()) == 0:
+            self.initialize_embeddings()
         return self.natural_language_search(query, page)
 
     def natural_language_search(
         self, search_query: str, page: int
     ) -> DatasetSearchResults:
-        query_string = self.process_natural_language(search_query)
-        print(query_string)
+        search_terms_json = self.process_natural_language(search_query)
+        print(search_terms_json, flush=True)
+        search_terms = json.loads(search_terms_json)
+
+        query = {
+            "query": self.generate_query_string(search_terms)
+        } | self.generate_temporal_coverage_query(search_terms)
+
+        query_string = urlencode(query)
+        print(search_terms)
         print(urlencode({"query": query_string}))
+
         return self.run_esgf_query(query_string, page)
 
     def build_natural_language_prompt(self, search_query: str) -> str:
@@ -48,7 +101,7 @@ class ESGFProvider(BaseSearchProvider):
 
     def process_natural_language(self, search_query: str) -> str:
         response = self.client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": NATURAL_LANGUAGE_PROCESSING_CONTEXT},
                 {
@@ -59,9 +112,7 @@ class ESGFProvider(BaseSearchProvider):
             temperature=0.7,
         )
         query = response.choices[0].message.content
-        if query[0] == '"' and query[-1] == '"':
-            query = query[1:-1]
-        return query  # .replace('"', '\\"')
+        return query
 
     def _extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
         dataset_id = dataset["id"]
@@ -124,3 +175,108 @@ class ESGFProvider(BaseSearchProvider):
                 for dataset in response["response"]["docs"]
             ]
         )[0]
+
+    def get_embedding(self, text):
+        return (
+            self.client.embeddings.create(input=[text], model="text-embedding-ada-002")
+            .data[0]
+            .embedding
+        )
+
+    def get_embeddings(self, text):
+        return [
+            e.embedding
+            for e in self.client.embeddings.create(
+                input=text, model="text-embedding-ada-002"
+            ).data
+        ]
+
+    def cosine_similarity(self, a, b):
+        return dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+    def get_cmip_embeddings_with_cache(self):
+        cache = Path("./embedding_cache")
+        if cache.exists():
+            print("embedding cache exists", flush=True)
+            with cache.open("rb") as f:
+                self.embeddings = pickle.load(f)
+        else:
+            print("no embedding cache, generating new", flush=True)
+            with cache.open(mode="wb") as f:
+                self.embeddings = self.extract_embedding_strings()
+                pickle.dump(self.embeddings, f)
+
+    def extract_embedding_strings(self) -> Dict[str, pd.DataFrame]:
+        desired_facets = [
+            "experiment_id",
+            "experiment_title",
+            "frequency",
+            "nominal_resolution",
+            "cf_standard_name",
+        ]
+        encoded_string = urlencode(
+            {
+                "project": "CMIP6",
+                "facets": ",".join(desired_facets),
+                "limit": "0",
+                "format": "application/solr+json",
+            }
+        )
+        facet_possibilities = (
+            f"https://esgf-node.llnl.gov/esg-search/search?{encoded_string}"
+        )
+
+        print("querying fields", flush=True)
+        r = requests.get(facet_possibilities)
+        response = r.json()
+        if r.status_code != 200:
+            raise ConnectionError(
+                f"Failed to get facet potential values from ESGF node: {facet_possibilities} {response}"
+            )
+        fields = response["facet_counts"]["facet_fields"]
+        print("aggregating fields", flush=True)
+        embeddings = {
+            f: pd.DataFrame({"string": fields[f][::2]}) for f in desired_facets
+        }
+        print("creating embeddings...", flush=True)
+        for k in embeddings.keys():
+            print(f"  embeddings for: {k}", flush=True)
+            embeddings[k]["embed"] = self.get_embeddings(embeddings[k].string.to_list())
+
+        return embeddings
+
+    def extract_relevant_description(self, description: str) -> List[str]:
+        return []
+
+    def generate_query_string(self, search_terms: Dict[str, str]) -> str:
+        desired_terms = ["nominal_resolution", "frequency"]
+        best_matches = []
+        for desired in desired_terms:
+            if desired in search_terms:
+                embedding = self.get_embedding(search_terms[desired])
+                self.embeddings[desired]["similarities"] = self.embeddings[desired][
+                    "embed"
+                ].apply(lambda e: self.cosine_similarity(e, embedding))
+
+                print(
+                    self.embeddings[desired]
+                    .sort_values("similarities", ascending=False)
+                    .head(5),
+                    flush=True,
+                )
+                best_matches.append(
+                    self.embeddings[desired]
+                    .sort_values("similarities", ascending=False)
+                    .head(1)["string"]
+                    .values[0]
+                )
+        description = self.extract_relevant_description(search_terms["description"])
+        return " AND ".join(best_matches + description)
+
+    def generate_temporal_coverage_query(self, terms: Dict[str, str]) -> Dict[str, str]:
+        query = {}
+        if "upper_time_bound" in terms:
+            query["end"] = terms["upper_time_bound"]
+        if "lower_time_bound" in terms:
+            query["start"] = terms["lower_time_bound"]
+        return query
