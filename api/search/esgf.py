@@ -64,6 +64,9 @@ Output:
 }
 """
 
+# cosine matching threshold to greedily take term
+GREEDY_EXTRACTION_THRESHOLD = 0.95
+
 
 class ESGFProvider(BaseSearchProvider):
     def __init__(self, openai_client):
@@ -83,18 +86,14 @@ class ESGFProvider(BaseSearchProvider):
         self, search_query: str, page: int
     ) -> DatasetSearchResults:
         search_terms_json = self.process_natural_language(search_query)
-        print(search_terms_json, flush=True)
         search_terms = json.loads(search_terms_json)
 
-        query = {
-            "query": self.generate_query_string(search_terms)
-        } | self.generate_temporal_coverage_query(search_terms)
+        query = self.generate_query_string(search_terms)
+        options = self.generate_temporal_coverage_query(search_terms)
 
-        query_string = urlencode(query)
-        print(search_terms)
-        print(urlencode({"query": query_string}))
+        print(query, flush=True)
 
-        return self.run_esgf_query(query_string, page)
+        return self.run_esgf_query(query, page, options)
 
     def build_natural_language_prompt(self, search_query: str) -> str:
         return "Convert the following input text: {}".format(search_query)
@@ -114,7 +113,7 @@ class ESGFProvider(BaseSearchProvider):
         query = response.choices[0].message.content
         return query
 
-    def _extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
+    def extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
         dataset_id = dataset["id"]
         params = urlencode(
             {
@@ -145,7 +144,9 @@ class ESGFProvider(BaseSearchProvider):
         ]
         return opendap_urls
 
-    def run_esgf_query(self, query_string: str, page: int) -> DatasetSearchResults:
+    def run_esgf_query(
+        self, query_string: str, page: int, options: Dict[str, str]
+    ) -> DatasetSearchResults:
         encoded_string = urlencode(
             {
                 "query": query_string,
@@ -157,6 +158,7 @@ class ESGFProvider(BaseSearchProvider):
                 "offset": "{}".format(default_settings.entries_per_page * page),
                 "format": "application/solr+json",
             }
+            | options
         )
 
         full_url = f"{default_settings.esgf_url}/search?{encoded_string}"
@@ -170,7 +172,7 @@ class ESGFProvider(BaseSearchProvider):
         return dask.compute(
             [
                 dask.delayed(Dataset)(
-                    dataset, dask.delayed(self._extract_files_from_dataset)(dataset)
+                    dataset, dask.delayed(self.extract_files_from_dataset)(dataset)
                 )
                 for dataset in response["response"]["docs"]
             ]
@@ -194,9 +196,9 @@ class ESGFProvider(BaseSearchProvider):
     def cosine_similarity(self, a, b):
         return dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-    def get_cmip_embeddings_with_cache(self):
+    def get_cmip_embeddings_with_cache(self, force_refresh=False):
         cache = Path("./embedding_cache")
-        if cache.exists():
+        if cache.exists() and not force_refresh:
             print("embedding cache exists", flush=True)
             with cache.open("rb") as f:
                 self.embeddings = pickle.load(f)
@@ -213,6 +215,8 @@ class ESGFProvider(BaseSearchProvider):
             "frequency",
             "nominal_resolution",
             "cf_standard_name",
+            "variable_long_name",
+            "variant_label",
         ]
         encoded_string = urlencode(
             {
@@ -241,12 +245,92 @@ class ESGFProvider(BaseSearchProvider):
         print("creating embeddings...", flush=True)
         for k in embeddings.keys():
             print(f"  embeddings for: {k}", flush=True)
+            # drop '' and other falsy strings
+            embeddings[k] = embeddings[k][embeddings[k].string.astype(bool)]
             embeddings[k]["embed"] = self.get_embeddings(embeddings[k].string.to_list())
 
         return embeddings
 
     def extract_relevant_description(self, description: str) -> List[str]:
-        return []
+        # experiment id and variant id are best taken as exact match rather than assumed by cosine
+        # general idea:
+        #   break on word boundary and take...
+        #     exact matches to experiment id and variant_label
+        #     anything that's over GREEDY_EXTRACTION_THRESHOLD
+        #   otherwise...
+        #     take non-matching inputs and conjoin them back into a phrase to take highest match across all categories
+        #     take the most relevant between averaged individual token similarities and the whole phrase
+        tokens = description.replace(",", " ").split()
+        matched = []
+        similar_fields = [
+            "experiment_title",
+            "cf_standard_name",
+            "variable_long_name",
+        ]
+        fallback_similarities = []
+
+        print(f"finding best terms for {tokens}")
+
+        def get_single_best_match(text, similar_fields):
+            most_similar = ("", 0.00)
+            for field in similar_fields:
+                embedding = self.get_embedding(text)
+                self.embeddings[field]["similarities"] = self.embeddings[field][
+                    "embed"
+                ].apply(lambda e: self.cosine_similarity(e, embedding))
+                best_match = (
+                    self.embeddings[field]
+                    .sort_values("similarities", ascending=False)
+                    .head(3)
+                )
+                string = best_match.string.values[0]
+                similarity = best_match.similarities.values[0]
+                print(f"    {string} => {similarity}")
+                if similarity >= most_similar[1]:
+                    most_similar = (string, similarity)
+            return most_similar
+
+        # clone tokens to remove during iteration
+        for t in tokens[:]:
+            if (
+                t in self.embeddings["variant_label"].string.values
+                or t in self.embeddings["experiment_id"].string.values
+            ):
+                print(f"  exact match: {t}")
+                matched.append(t)
+                tokens.remove(t)
+            else:
+                print(f"  approximate matching for {t}")
+                phrase, similarity = get_single_best_match(t, similar_fields)
+                if similarity >= GREEDY_EXTRACTION_THRESHOLD:
+                    print(
+                        f"    matched word {t} -> {phrase} over threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
+                    )
+                    matched.append(phrase)
+                    tokens.remove(t)
+                else:
+                    print(
+                        f"    closest match {t} -> {phrase} is under threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
+                    )
+                fallback_similarities.append((phrase, similarity))
+        print(f"  leftover tokens: {tokens}\nmatching for whole phrase")
+        conjoined_phrase, conjoined_similarity = get_single_best_match(
+            " ".join(tokens), similar_fields
+        )
+        avg_sim = sum((map(lambda f: f[1], fallback_similarities))) / len(
+            fallback_similarities
+        )
+        print(f"  conjoined similarity {conjoined_similarity} - avg by parts {avg_sim}")
+        if conjoined_similarity >= avg_sim:
+            print(f"    using conjoined phrase {conjoined_phrase}")
+            matched.append(conjoined_phrase)
+        else:
+            for part in fallback_similarities:
+                matched += part[0]
+
+        print(f"finalized search terms are {matched}")
+
+        return matched
 
     def generate_query_string(self, search_terms: Dict[str, str]) -> str:
         desired_terms = ["nominal_resolution", "frequency"]
@@ -257,11 +341,11 @@ class ESGFProvider(BaseSearchProvider):
                 self.embeddings[desired]["similarities"] = self.embeddings[desired][
                     "embed"
                 ].apply(lambda e: self.cosine_similarity(e, embedding))
-
+                print(f"querying for {desired}: {search_terms[desired]}")
                 print(
                     self.embeddings[desired]
                     .sort_values("similarities", ascending=False)
-                    .head(5),
+                    .head(3),
                     flush=True,
                 )
                 best_matches.append(
@@ -271,7 +355,12 @@ class ESGFProvider(BaseSearchProvider):
                     .values[0]
                 )
         description = self.extract_relevant_description(search_terms["description"])
-        return " AND ".join(best_matches + description)
+        print(
+            "{}".format(
+                " AND ".join(map(lambda t: f'"{t}"', best_matches + description))
+            )
+        )
+        return " AND ".join(map(lambda t: f'"{t}"', best_matches + description))
 
     def generate_temporal_coverage_query(self, terms: Dict[str, str]) -> Dict[str, str]:
         query = {}
