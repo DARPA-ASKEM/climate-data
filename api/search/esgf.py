@@ -129,12 +129,13 @@ class ESGFProvider(BaseSearchProvider):
             raise ConnectionError(
                 f"Failed to extract files from dataset via file search: {full_url} {response}"
             )
+        print(response, flush=True)
         files = response["response"]["docs"]
         if len(files) == 0:
             raise ConnectionError(
                 f"Failed to extract files from dataset: empty list {full_url}"
             )
-
+        print(files)
         # file url responses are lists of strings with their protocols separated by |
         # e.x. https://esgf-node.example|mimetype|OPENDAP
         opendap_urls = [
@@ -142,6 +143,10 @@ class ESGFProvider(BaseSearchProvider):
             for url in itertools.chain.from_iterable([f["url"] for f in files])
             if "OPENDAP" in url
         ]
+
+        # sometimes the opendap request form is returned. we strip the trailing suffix if needed
+        opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
+
         return opendap_urls
 
     def run_esgf_query(
@@ -155,8 +160,9 @@ class ESGFProvider(BaseSearchProvider):
                 "latest": "true",
                 "sort": "true",
                 "limit": f"{default_settings.entries_per_page}",
-                "offset": "{}".format(default_settings.entries_per_page * page),
+                "offset": "{}".format(default_settings.entries_per_page * (page - 1)),
                 "format": "application/solr+json",
+                "distrib": "true",
             }
             | options
         )
@@ -168,6 +174,7 @@ class ESGFProvider(BaseSearchProvider):
             raise ConnectionError(
                 f"Failed to search against ESGF node: {full_url} {r.status_code} {response}"
             )
+
         # parallel over datasets, but delay fetching url until needed
         return dask.compute(
             [
@@ -216,6 +223,7 @@ class ESGFProvider(BaseSearchProvider):
             "nominal_resolution",
             "cf_standard_name",
             "variable_long_name",
+            "variable_id",
             "variant_label",
         ]
         encoded_string = urlencode(
@@ -266,6 +274,7 @@ class ESGFProvider(BaseSearchProvider):
             "experiment_title",
             "cf_standard_name",
             "variable_long_name",
+            "variable_id",
         ]
         fallback_similarities = []
 
@@ -313,7 +322,12 @@ class ESGFProvider(BaseSearchProvider):
                         f"    closest match {t} -> {phrase} is under threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
                     )
                 fallback_similarities.append((phrase, similarity))
+
+        if len(tokens) == 0:
+            return matched
+
         print(f"  leftover tokens: {tokens}\nmatching for whole phrase")
+
         conjoined_phrase, conjoined_similarity = get_single_best_match(
             " ".join(tokens), similar_fields
         )
@@ -354,13 +368,12 @@ class ESGFProvider(BaseSearchProvider):
                     .head(1)["string"]
                     .values[0]
                 )
-        description = self.extract_relevant_description(search_terms["description"])
-        print(
-            "{}".format(
-                " AND ".join(map(lambda t: f'"{t}"', best_matches + description))
-            )
-        )
-        return " AND ".join(map(lambda t: f'"{t}"', best_matches + description))
+        description = []
+        if "description" in search_terms:
+            description = self.extract_relevant_description(search_terms["description"])
+        query_string = " AND ".join(map(lambda t: f'"{t}"', best_matches + description))
+        print(f"lucene query: {query_string}")
+        return query_string
 
     def generate_temporal_coverage_query(self, terms: Dict[str, str]) -> Dict[str, str]:
         query = {}
