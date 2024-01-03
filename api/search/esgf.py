@@ -120,6 +120,7 @@ class ESGFProvider(BaseSearchProvider):
                 "type": "File",
                 "format": "application/solr+json",
                 "dataset_id": dataset_id,
+                "limit": 50,
             }
         )
         full_url = f"{default_settings.esgf_url}/search?{params}"
@@ -225,6 +226,9 @@ class ESGFProvider(BaseSearchProvider):
             "variable_long_name",
             "variable_id",
             "variant_label",
+            "institution_id",
+            "master_id",
+            "table_id",
         ]
         encoded_string = urlencode(
             {
@@ -275,7 +279,22 @@ class ESGFProvider(BaseSearchProvider):
             "cf_standard_name",
             "variable_long_name",
             "variable_id",
+            "table_id",
         ]
+        exact_fields = [
+            "institution_id",
+            "master_id",
+            "variant_label",
+            "experiment_id",
+        ]
+        exact_match_values = [
+            match
+            for nested_list in [
+                self.embeddings[field].string.values for field in exact_fields
+            ]
+            for match in nested_list
+        ]
+
         fallback_similarities = []
 
         print(f"finding best terms for {tokens}")
@@ -300,11 +319,9 @@ class ESGFProvider(BaseSearchProvider):
             return most_similar
 
         # clone tokens to remove during iteration
+
         for t in tokens[:]:
-            if (
-                t in self.embeddings["variant_label"].string.values
-                or t in self.embeddings["experiment_id"].string.values
-            ):
+            if t in exact_match_values:
                 print(f"  exact match: {t}")
                 matched.append(t)
                 tokens.remove(t)
@@ -331,6 +348,8 @@ class ESGFProvider(BaseSearchProvider):
         conjoined_phrase, conjoined_similarity = get_single_best_match(
             " ".join(tokens), similar_fields
         )
+
+        fallback_similarities = [f for f in fallback_similarities if f[0] in tokens]
         avg_sim = sum((map(lambda f: f[1], fallback_similarities))) / len(
             fallback_similarities
         )

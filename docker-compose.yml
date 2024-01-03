@@ -3,11 +3,22 @@ services:
   service:
     build: 
       context: ./
-      dockerfile: ./docker/Dockerfile
+      dockerfile: ./docker/server/Dockerfile
     volumes:
       - ./api:/opt/climate-search/api
     ports:
       - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+  jupyter: 
+    build: 
+      context: ./
+      dockerfile: ./docker/jupyter/Dockerfile
+    volumes:
+      - ./api:/opt/climate-search/api
+    ports:
+      - "8888:8888"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
