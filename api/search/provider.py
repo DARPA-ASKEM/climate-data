@@ -5,11 +5,9 @@ import dask
 
 class Dataset:
     metadata: Dict[str, Any]  # json
-    opendap_urls: Delayed  # List[str]
 
-    def __init__(self, metadata, urls):
+    def __init__(self, metadata):
         self.metadata = metadata
-        self.urls = urls
 
 
 DatasetSearchResults = List[Dataset]
@@ -17,4 +15,7 @@ DatasetSearchResults = List[Dataset]
 
 class BaseSearchProvider:
     def search(self, query: str, page: int) -> DatasetSearchResults:
+        return []
+
+    def get_access_urls(self, dataset: Dataset) -> List[str]:
         return []

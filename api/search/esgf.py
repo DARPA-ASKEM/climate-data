@@ -67,6 +67,26 @@ Output:
 # cosine matching threshold to greedily take term
 GREEDY_EXTRACTION_THRESHOLD = 0.95
 
+SEARCH_FACETS = {
+    # match by cosine similarity
+    "similar": [
+        "experiment_title",
+        "cf_standard_name",
+        "variable_long_name",
+        "variable_id",
+        "table_id",
+    ],
+    # only take exact matches
+    "exact": [
+        "institution_id",
+        "master_id",
+        "variant_label",
+        "experiment_id",
+    ],
+    # create embeddings, but handle manually elsewhere
+    "other": ["nominal_resolution", "frequency"],
+}
+
 
 class ESGFProvider(BaseSearchProvider):
     def __init__(self, openai_client):
@@ -74,47 +94,38 @@ class ESGFProvider(BaseSearchProvider):
         self.client: OpenAI = openai_client
         self.embeddings = {}
 
-    def initialize_embeddings(self):
-        self.get_cmip_embeddings_with_cache()
+    def initialize_embeddings(self, force_refresh=False):
+        """
+        creates string embeddings if needed, otherwise reloads from cache.
+        force_refresh is needed if the list of facets changes.
+        """
+        cache = Path("./embedding_cache")
+        if cache.exists() and not force_refresh:
+            print("embedding cache exists", flush=True)
+            with cache.open("rb") as f:
+                self.embeddings = pickle.load(f)
+        else:
+            print("no embedding cache, generating new", flush=True)
+            with cache.open(mode="wb") as f:
+                self.embeddings = self.extract_embedding_strings()
+                pickle.dump(self.embeddings, f)
 
-    def search(self, query: str, page: int) -> DatasetSearchResults:
+    def search(
+        self, query: str, page: int, force_refresh_cache: bool = False
+    ) -> DatasetSearchResults:
+        """
+        converts a natural language query to a list of ESGF dataset
+        metadata dictionaries by running a lucene query against the given
+        ESGF node in settings.
+        """
         if len(self.embeddings.keys()) == 0:
-            self.initialize_embeddings()
+            self.initialize_embeddings(force_refresh_cache)
         return self.natural_language_search(query, page)
 
-    def natural_language_search(
-        self, search_query: str, page: int
-    ) -> DatasetSearchResults:
-        search_terms_json = self.process_natural_language(search_query)
-        search_terms = json.loads(search_terms_json)
-
-        query = self.generate_query_string(search_terms)
-        options = self.generate_temporal_coverage_query(search_terms)
-
-        print(query, flush=True)
-
-        return self.run_esgf_query(query, page, options)
-
-    def build_natural_language_prompt(self, search_query: str) -> str:
-        return "Convert the following input text: {}".format(search_query)
-
-    def process_natural_language(self, search_query: str) -> str:
-        response = self.client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": NATURAL_LANGUAGE_PROCESSING_CONTEXT},
-                {
-                    "role": "user",
-                    "content": self.build_natural_language_prompt(search_query),
-                },
-            ],
-            temperature=0.7,
-        )
-        query = response.choices[0].message.content
-        return query
-
-    def extract_files_from_dataset(self, dataset: Dict[str, Any]) -> List[str]:
-        dataset_id = dataset["id"]
+    def get_access_urls_by_id(self, dataset_id: str) -> List[str]
+        """
+        returns a list of OPENDAP URLs for use in processing given a dataset.
+        """
         params = urlencode(
             {
                 "type": "File",
@@ -130,13 +141,11 @@ class ESGFProvider(BaseSearchProvider):
             raise ConnectionError(
                 f"Failed to extract files from dataset via file search: {full_url} {response}"
             )
-        print(response, flush=True)
         files = response["response"]["docs"]
         if len(files) == 0:
             raise ConnectionError(
                 f"Failed to extract files from dataset: empty list {full_url}"
             )
-        print(files)
         # file url responses are lists of strings with their protocols separated by |
         # e.x. https://esgf-node.example|mimetype|OPENDAP
         opendap_urls = [
@@ -144,15 +153,59 @@ class ESGFProvider(BaseSearchProvider):
             for url in itertools.chain.from_iterable([f["url"] for f in files])
             if "OPENDAP" in url
         ]
-
         # sometimes the opendap request form is returned. we strip the trailing suffix if needed
         opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
-
         return opendap_urls
+
+    def get_access_urls(self, dataset: Dataset) -> List[str]:
+        return self.get_access_urls_by_id(dataset.metadata["id"])
+
+    def natural_language_search(
+        self, search_query: str, page: int
+    ) -> DatasetSearchResults:
+        """
+        converts to natural language and runs the result against the ESGF node, returning a list of datasets.
+        """
+        search_terms_json = self.process_natural_language(search_query)
+        search_terms = json.loads(search_terms_json)
+
+        query = self.generate_query_string(search_terms)
+        options = self.generate_temporal_coverage_query(search_terms)
+
+        print(query, flush=True)
+
+        return self.run_esgf_query(query, page, options)
+
+    def build_natural_language_prompt(self, search_query: str) -> str:
+        """
+        wraps user input given to the LLM after the context.
+        """
+        return "Convert the following input text: {}".format(search_query)
+
+    def process_natural_language(self, search_query: str) -> str:
+        """
+        runs query against LLM and returns the result string.
+        """
+        response = self.client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": NATURAL_LANGUAGE_PROCESSING_CONTEXT},
+                {
+                    "role": "user",
+                    "content": self.build_natural_language_prompt(search_query),
+                },
+            ],
+            temperature=0.7,
+        )
+        query = response.choices[0].message.content
+        return query
 
     def run_esgf_query(
         self, query_string: str, page: int, options: Dict[str, str]
     ) -> DatasetSearchResults:
+        """
+        runs the formatted apache lucene query against the ESGF node and returns the metadata in datasets.
+        """
         encoded_string = urlencode(
             {
                 "query": query_string,
@@ -180,13 +233,14 @@ class ESGFProvider(BaseSearchProvider):
         return dask.compute(
             [
                 dask.delayed(Dataset)(
-                    dataset, dask.delayed(self.extract_files_from_dataset)(dataset)
+                    metadata,
                 )
-                for dataset in response["response"]["docs"]
+                for metadata in response["response"]["docs"]
             ]
         )[0]
 
     def get_embedding(self, text):
+        """returns an embedding for a single string."""
         return (
             self.client.embeddings.create(input=[text], model="text-embedding-ada-002")
             .data[0]
@@ -194,6 +248,7 @@ class ESGFProvider(BaseSearchProvider):
         )
 
     def get_embeddings(self, text):
+        """returns a list of embeddings for a list of strings."""
         return [
             e.embedding
             for e in self.client.embeddings.create(
@@ -204,32 +259,14 @@ class ESGFProvider(BaseSearchProvider):
     def cosine_similarity(self, a, b):
         return dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-    def get_cmip_embeddings_with_cache(self, force_refresh=False):
-        cache = Path("./embedding_cache")
-        if cache.exists() and not force_refresh:
-            print("embedding cache exists", flush=True)
-            with cache.open("rb") as f:
-                self.embeddings = pickle.load(f)
-        else:
-            print("no embedding cache, generating new", flush=True)
-            with cache.open(mode="wb") as f:
-                self.embeddings = self.extract_embedding_strings()
-                pickle.dump(self.embeddings, f)
-
     def extract_embedding_strings(self) -> Dict[str, pd.DataFrame]:
-        desired_facets = [
-            "experiment_id",
-            "experiment_title",
-            "frequency",
-            "nominal_resolution",
-            "cf_standard_name",
-            "variable_long_name",
-            "variable_id",
-            "variant_label",
-            "institution_id",
-            "master_id",
-            "table_id",
-        ]
+        """
+        builds embeddings dictionary given the desired SEARCH_FACETS. finds possible
+        values for given facets from ESGF node and then gets string embeddings of those
+        enumerated values.
+        """
+        desired_facets = [item for inner in SEARCH_FACETS.values() for item in inner]
+        print(desired_facets)
         encoded_string = urlencode(
             {
                 "project": "CMIP6",
@@ -264,6 +301,10 @@ class ESGFProvider(BaseSearchProvider):
         return embeddings
 
     def extract_relevant_description(self, description: str) -> List[str]:
+        """
+        takes the LLM-extracted description field and parses it into meaningful
+        terms to build into the formatted apache lucene query.
+        """
         # experiment id and variant id are best taken as exact match rather than assumed by cosine
         # general idea:
         #   break on word boundary and take...
@@ -274,23 +315,10 @@ class ESGFProvider(BaseSearchProvider):
         #     take the most relevant between averaged individual token similarities and the whole phrase
         tokens = description.replace(",", " ").split()
         matched = []
-        similar_fields = [
-            "experiment_title",
-            "cf_standard_name",
-            "variable_long_name",
-            "variable_id",
-            "table_id",
-        ]
-        exact_fields = [
-            "institution_id",
-            "master_id",
-            "variant_label",
-            "experiment_id",
-        ]
         exact_match_values = [
             match
             for nested_list in [
-                self.embeddings[field].string.values for field in exact_fields
+                self.embeddings[field].string.values for field in SEARCH_FACETS["exact"]
             ]
             for match in nested_list
         ]
@@ -327,7 +355,7 @@ class ESGFProvider(BaseSearchProvider):
                 tokens.remove(t)
             else:
                 print(f"  approximate matching for {t}")
-                phrase, similarity = get_single_best_match(t, similar_fields)
+                phrase, similarity = get_single_best_match(t, SEARCH_FACETS["similar"])
                 if similarity >= GREEDY_EXTRACTION_THRESHOLD:
                     print(
                         f"    matched word {t} -> {phrase} over threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
@@ -346,7 +374,7 @@ class ESGFProvider(BaseSearchProvider):
         print(f"  leftover tokens: {tokens}\nmatching for whole phrase")
 
         conjoined_phrase, conjoined_similarity = get_single_best_match(
-            " ".join(tokens), similar_fields
+            " ".join(tokens), SEARCH_FACETS["similar"]
         )
 
         fallback_similarities = [f for f in fallback_similarities if f[0] in tokens]
@@ -366,6 +394,9 @@ class ESGFProvider(BaseSearchProvider):
         return matched
 
     def generate_query_string(self, search_terms: Dict[str, str]) -> str:
+        """
+        handles LLM-extracted fields separately as needed and returns the formatted lucene query.
+        """
         desired_terms = ["nominal_resolution", "frequency"]
         best_matches = []
         for desired in desired_terms:
@@ -395,6 +426,9 @@ class ESGFProvider(BaseSearchProvider):
         return query_string
 
     def generate_temporal_coverage_query(self, terms: Dict[str, str]) -> Dict[str, str]:
+        """
+        creates ESGF search time bound arguments.
+        """
         query = {}
         if "upper_time_bound" in terms:
             query["end"] = terms["upper_time_bound"]

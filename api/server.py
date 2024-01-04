@@ -11,6 +11,17 @@ esgf = ESGFProvider(client)
 
 
 @app.get("/search/esgf")
-async def esgf_search(query: str = "", page: int = 1):
-    datasets = esgf.search(query, page)
+async def esgf_search(query: str = "", page: int = 1, refresh_cache=False):
+    datasets = esgf.search(query, page, refresh_cache)
     return {"results": datasets}
+
+
+@app.get(path="/subset/esgf")
+async def esgf_subset(
+    dataset_id: str = "",
+    envelope: str = "",
+    timestamps: str = "",
+    divide_by: str = "",
+    custom: str = "",
+):
+    pass
