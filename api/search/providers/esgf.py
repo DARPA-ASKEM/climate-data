@@ -64,7 +64,7 @@ Output:
 """
 
 # cosine matching threshold to greedily take term
-GREEDY_EXTRACTION_THRESHOLD = 0.95
+GREEDY_EXTRACTION_THRESHOLD = 0.91
 
 SEARCH_FACETS = {
     # match by cosine similarity

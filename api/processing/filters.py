@@ -109,7 +109,7 @@ def options_from_url_parameters(parameters: Dict[str, Any]) -> DatasetSubsetOpti
             fields = fields.replace("!", "")
             fields = fields.split(",")
         options.thinning = ThinningSubsetOptions(
-            factor=thin_factor, fields=fields, negated=negated
+            factor=thin_factor, fields=fields, negated=negated, squared=False
         )
 
     timestamps = parameters.get(DatasetQueryParameters.timestamps.value, None)

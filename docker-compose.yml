@@ -11,6 +11,23 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+    depends_on:
+      - redis 
+      - minio
+    entrypoint: "nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0" 
+  rq-worker:
+    build: 
+      context: ./
+      dockerfile: ./docker/server/Dockerfile
+    volumes:
+      - ./api:/opt/climate-search/api
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+    depends_on:
+      - redis 
+      - minio
+    entrypoint: "nohup poetry run rq worker -u redis://redis-climate-data:6379 --with-scheduler" 
   jupyter: 
     build: 
       context: ./
@@ -31,3 +48,9 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+  redis:
+    container_name: redis-climate-data
+    image: redis
+    ports:
+      - "6379:6379"
+

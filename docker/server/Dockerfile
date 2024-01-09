@@ -8,4 +8,4 @@ RUN pip install poetry
 RUN chown -R svc:svc /opt/climate-search
 USER svc
 RUN poetry install
-CMD nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0
+# CMD nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0

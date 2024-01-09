@@ -1,6 +1,8 @@
-from fastapi import FastAPI, Request
+from venv import create
+from fastapi import FastAPI, Request, Depends
 from api.search.providers.esgf import ESGFProvider
-from api.processing.providers.esgf import slice_esgf_dataset
+from api.processing.providers.esgf import slice_and_store_dataset, slice_esgf_dataset
+from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
 from typing import List, Dict
@@ -22,11 +24,22 @@ async def esgf_search(query: str = "", page: int = 1, refresh_cache=False):
     return {"results": datasets}
 
 
+@app.get("/fetch/esgf")
+async def esgf_fetch(dataset_id: str = ""):
+    urls = esgf.get_access_urls_by_id(dataset_id)
+    return {"dataset": dataset_id, "urls": urls}
+
+
 @app.get(path="/subset/esgf")
-async def esgf_subset(request: Request, dataset_id: str = ""):
+async def esgf_subset(request: Request, redis=Depends(get_redis), dataset_id: str = ""):
     params = params_to_dict(request)
-    print(params)
-    ds = slice_esgf_dataset(esgf, dataset_id, params)
-    print("finished")
-    return {"ds": {"nbytes": ds.nbytes}}
-    # ds.to_netcdf("sliced.nc")
+    urls = esgf.get_access_urls_by_id(dataset_id)
+    job = create_job(
+        func=slice_and_store_dataset, args=[urls, dataset_id, params], redis=redis
+    )
+    return job
+
+
+@app.get(path="/status/{job_id}")
+async def job_status(job_id: str, redis=Depends(get_redis)):
+    return fetch_job_status(job_id, redis=redis)
