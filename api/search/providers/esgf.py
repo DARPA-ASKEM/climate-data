@@ -2,12 +2,11 @@ from api.settings import default_settings
 from api.search.provider import BaseSearchProvider, DatasetSearchResults, Dataset
 import requests
 from urllib.parse import urlencode
-from typing import List, Dict, Any
+from typing import List, Dict
 import itertools
 import dask
 from openai import OpenAI
 from numpy import dot
-from numpy.linalg import norm
 import json
 import numpy as np
 import pandas as pd
@@ -62,6 +61,7 @@ Output:
     "upper_time_bound": "1999-07-00T00:00:00Z",
     "description": "relative humidity"
 }
+
 """
 
 # cosine matching threshold to greedily take term
@@ -75,13 +75,17 @@ SEARCH_FACETS = {
         "variable_long_name",
         "variable_id",
         "table_id",
+        "source_type",
+        "source_id",
+        "activity_id",
     ],
     # only take exact matches
     "exact": [
         "institution_id",
-        "master_id",
         "variant_label",
         "experiment_id",
+        "frequency",
+        "grid_label",
     ],
     # create embeddings, but handle manually elsewhere
     "other": ["nominal_resolution", "frequency"],
@@ -118,11 +122,11 @@ class ESGFProvider(BaseSearchProvider):
         metadata dictionaries by running a lucene query against the given
         ESGF node in settings.
         """
-        if len(self.embeddings.keys()) == 0:
+        if len(self.embeddings.keys()) == 0 or force_refresh_cache:
             self.initialize_embeddings(force_refresh_cache)
         return self.natural_language_search(query, page)
 
-    def get_access_urls_by_id(self, dataset_id: str) -> List[str]
+    def get_access_urls_by_id(self, dataset_id: str) -> List[str]:
         """
         returns a list of OPENDAP URLs for use in processing given a dataset.
         """
@@ -173,7 +177,8 @@ class ESGFProvider(BaseSearchProvider):
         options = self.generate_temporal_coverage_query(search_terms)
 
         print(query, flush=True)
-
+        if query == "":
+            return []
         return self.run_esgf_query(query, page, options)
 
     def build_natural_language_prompt(self, search_query: str) -> str:
@@ -281,11 +286,11 @@ class ESGFProvider(BaseSearchProvider):
 
         print("querying fields", flush=True)
         r = requests.get(facet_possibilities)
-        response = r.json()
         if r.status_code != 200:
             raise ConnectionError(
-                f"Failed to get facet potential values from ESGF node: {facet_possibilities} {response}"
+                f"Failed to get facet potential values from ESGF node: {facet_possibilities} {r.status_code}"
             )
+        response = r.json()
         fields = response["facet_counts"]["facet_fields"]
         print("aggregating fields", flush=True)
         embeddings = {
@@ -314,6 +319,17 @@ class ESGFProvider(BaseSearchProvider):
         #     take non-matching inputs and conjoin them back into a phrase to take highest match across all categories
         #     take the most relevant between averaged individual token similarities and the whole phrase
         tokens = description.replace(",", " ").split()
+
+        # looking for exact match on an ESGF dataset full ID would be a dict of 10+M entries
+        # so we can leverage breaking apart the longform id into each component period-separated
+        # as individual tokens. much faster and cleaner.
+        tokens = [
+            t for exploded in [token.split(".") for token in tokens] for t in exploded
+        ]
+        # after the above, date stamps aren't in the same format in the version field,
+        # so we strip according to the format if it perfectly matches, then use it as free-text
+        # rather than a field to check. this happens below, during exact match
+
         matched = []
         exact_match_values = [
             match
@@ -349,6 +365,12 @@ class ESGFProvider(BaseSearchProvider):
         # clone tokens to remove during iteration
 
         for t in tokens[:]:
+            # quick check for specific date field mentioned above in token splitting - check if it's the exact format and use it.
+            if len(t) == 9 and t[0] == "v" and t[1:].isdigit():
+                print(f"  date match: {t}")
+                matched.append(t[1:])
+                tokens.remove(t)
+                continue
             if t in exact_match_values:
                 print(f"  exact match: {t}")
                 matched.append(t)
@@ -378,6 +400,9 @@ class ESGFProvider(BaseSearchProvider):
         )
 
         fallback_similarities = [f for f in fallback_similarities if f[0] in tokens]
+        if len(fallback_similarities) == 0:
+            return matched
+
         avg_sim = sum((map(lambda f: f[1], fallback_similarities))) / len(
             fallback_similarities
         )

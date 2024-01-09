@@ -22,3 +22,12 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+  minio: 
+    build: 
+      context: ./
+      dockerfile: ./docker/minio/Dockerfile
+    volumes:
+      - ./data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
