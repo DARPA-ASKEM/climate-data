@@ -61,7 +61,6 @@ Output:
     "upper_time_bound": "1999-07-00T00:00:00Z",
     "description": "relative humidity"
 }
-
 """
 
 # cosine matching threshold to greedily take term
@@ -78,16 +77,17 @@ SEARCH_FACETS = {
         "source_type",
         "source_id",
         "activity_id",
+        "nominal_resolution",
+        "frequency",
     ],
     # only take exact matches
     "exact": [
         "institution_id",
         "variant_label",
         "experiment_id",
-        "frequency",
         "grid_label",
     ],
-    # create embeddings, but handle manually elsewhere
+    # create embeddings, but handle manually elsewhere - optimization on a specific field
     "other": ["nominal_resolution", "frequency"],
 }
 
@@ -305,6 +305,25 @@ class ESGFProvider(BaseSearchProvider):
 
         return embeddings
 
+    def get_single_best_match(self, text, similar_fields):
+        most_similar = ("", 0.00)
+        for field in similar_fields:
+            embedding = self.get_embedding(text)
+            self.embeddings[field]["similarities"] = self.embeddings[field][
+                "embed"
+            ].apply(lambda e: self.cosine_similarity(e, embedding))
+            best_match = (
+                self.embeddings[field]
+                .sort_values("similarities", ascending=False)
+                .head(3)
+            )
+            string = best_match.string.values[0]
+            similarity = best_match.similarities.values[0]
+            print(f"    {string} => {similarity}")
+            if similarity >= most_similar[1]:
+                most_similar = (string, similarity)
+        return most_similar
+
     def extract_relevant_description(self, description: str) -> List[str]:
         """
         takes the LLM-extracted description field and parses it into meaningful
@@ -343,29 +362,11 @@ class ESGFProvider(BaseSearchProvider):
 
         print(f"finding best terms for {tokens}")
 
-        def get_single_best_match(text, similar_fields):
-            most_similar = ("", 0.00)
-            for field in similar_fields:
-                embedding = self.get_embedding(text)
-                self.embeddings[field]["similarities"] = self.embeddings[field][
-                    "embed"
-                ].apply(lambda e: self.cosine_similarity(e, embedding))
-                best_match = (
-                    self.embeddings[field]
-                    .sort_values("similarities", ascending=False)
-                    .head(3)
-                )
-                string = best_match.string.values[0]
-                similarity = best_match.similarities.values[0]
-                print(f"    {string} => {similarity}")
-                if similarity >= most_similar[1]:
-                    most_similar = (string, similarity)
-            return most_similar
-
         # clone tokens to remove during iteration
 
         for t in tokens[:]:
-            # quick check for specific date field mentioned above in token splitting - check if it's the exact format and use it.
+            # quick check for specific date field mentioned above in token splitting - check if
+            # it's the exact format and use it if so
             if len(t) == 9 and t[0] == "v" and t[1:].isdigit():
                 print(f"  date match: {t}")
                 matched.append(t[1:])
@@ -377,7 +378,9 @@ class ESGFProvider(BaseSearchProvider):
                 tokens.remove(t)
             else:
                 print(f"  approximate matching for {t}")
-                phrase, similarity = get_single_best_match(t, SEARCH_FACETS["similar"])
+                phrase, similarity = self.get_single_best_match(
+                    t, SEARCH_FACETS["similar"]
+                )
                 if similarity >= GREEDY_EXTRACTION_THRESHOLD:
                     print(
                         f"    matched word {t} -> {phrase} over threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
@@ -395,7 +398,7 @@ class ESGFProvider(BaseSearchProvider):
 
         print(f"  leftover tokens: {tokens}\nmatching for whole phrase")
 
-        conjoined_phrase, conjoined_similarity = get_single_best_match(
+        conjoined_phrase, conjoined_similarity = self.get_single_best_match(
             " ".join(tokens), SEARCH_FACETS["similar"]
         )
 
@@ -424,25 +427,21 @@ class ESGFProvider(BaseSearchProvider):
         """
         desired_terms = ["nominal_resolution", "frequency"]
         best_matches = []
+
         for desired in desired_terms:
             if desired in search_terms:
-                embedding = self.get_embedding(search_terms[desired])
-                self.embeddings[desired]["similarities"] = self.embeddings[desired][
-                    "embed"
-                ].apply(lambda e: self.cosine_similarity(e, embedding))
-                print(f"querying for {desired}: {search_terms[desired]}")
-                print(
-                    self.embeddings[desired]
-                    .sort_values("similarities", ascending=False)
-                    .head(3),
-                    flush=True,
+                print(f"{search_terms[desired], desired}")
+                phrase, sim = self.get_single_best_match(
+                    search_terms[desired], [desired]
                 )
-                best_matches.append(
-                    self.embeddings[desired]
-                    .sort_values("similarities", ascending=False)
-                    .head(1)["string"]
-                    .values[0]
-                )
+                if sim >= GREEDY_EXTRACTION_THRESHOLD:
+                    best_matches.append(phrase)
+                else:
+                    print(
+                        f"  failed to find good candidate for {desired}: '{search_terms[desired]}'"
+                    )
+                    search_terms["description"] += f" {search_terms[desired]}"
+
         description = []
         if "description" in search_terms:
             description = self.extract_relevant_description(search_terms["description"])
