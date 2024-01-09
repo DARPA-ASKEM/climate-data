@@ -10,4 +10,5 @@ def slice_esgf_dataset(
     urls = provider.get_access_urls_by_id(dataset_id)
     ds = xarray.open_mfdataset(urls)
     options = filters.options_from_url_parameters(params)
+    print(f"original size: {ds.nbytes}\nslicing with options {options}")
     return filters.subset_with_options(ds, options)
