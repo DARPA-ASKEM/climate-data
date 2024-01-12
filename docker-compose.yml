@@ -6,6 +6,7 @@ services:
       dockerfile: ./docker/server/Dockerfile
     volumes:
       - ./api:/opt/climate-search/api
+      - ./data:/opt/climate-search/data
     ports:
       - "8000:8000"
     environment:
@@ -34,6 +35,7 @@ services:
       dockerfile: ./docker/jupyter/Dockerfile
     volumes:
       - ./api:/opt/climate-search/api
+      - ./data:/opt/climate-search/data
     ports:
       - "8888:8888"
     environment:
@@ -48,6 +50,9 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-miniouser}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-miniopass}
   redis:
     container_name: redis-climate-data
     image: redis

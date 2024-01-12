@@ -362,8 +362,18 @@ class ESGFProvider(BaseSearchProvider):
 
         print(f"finding best terms for {tokens}")
 
-        # clone tokens to remove during iteration
+        # first check all as a phrase, kick back to individual tokens if nothing fits well (greedy threshold)
+        conjoined_phrase, conjoined_similarity = self.get_single_best_match(
+            " ".join(tokens), SEARCH_FACETS["similar"]
+        )
+        if conjoined_similarity > GREEDY_EXTRACTION_THRESHOLD:
+            print(
+                f"  greedily taking full phrase: {conjoined_phrase} at {conjoined_similarity}"
+            )
+            matched.append(conjoined_phrase)
+            tokens = []
 
+        # clone tokens to remove during iteration
         for t in tokens[:]:
             # quick check for specific date field mentioned above in token splitting - check if
             # it's the exact format and use it if so
@@ -394,6 +404,7 @@ class ESGFProvider(BaseSearchProvider):
                 fallback_similarities.append((phrase, similarity))
 
         if len(tokens) == 0:
+            print(f"finalized search terms are {matched}")
             return matched
 
         print(f"  leftover tokens: {tokens}\nmatching for whole phrase")

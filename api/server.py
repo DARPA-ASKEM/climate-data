@@ -1,7 +1,6 @@
-from venv import create
 from fastapi import FastAPI, Request, Depends
 from api.search.providers.esgf import ESGFProvider
-from api.processing.providers.esgf import slice_and_store_dataset, slice_esgf_dataset
+from api.processing.providers.esgf import slice_and_store_dataset
 from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
