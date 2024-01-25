@@ -12,9 +12,10 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+      - TERARIUM_USER=${TERARIUM_USER}
+      - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
       - redis 
-      - minio
     entrypoint: "nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0" 
   rq-worker:
     build: 
@@ -25,10 +26,13 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
+      - TERARIUM_USER=${TERARIUM_USER}
+      - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
       - redis 
-      - minio
-    entrypoint: "nohup poetry run rq worker -u redis://redis-climate-data:6379 --with-scheduler" 
+    # not sure why, but rq worker was not taking env vars from environment above. 
+    # wrap in shell call for workaround 
+    entrypoint: "nohup sh -c 'TERARIUM_USER=\"${TERARIUM_USER}\" TERARIUM_PASS=\"${TERARIUM_PASS}\" poetry run rq worker -u redis://redis-climate-data:6379 --with-scheduler'" 
   jupyter: 
     build: 
       context: ./
@@ -41,21 +45,23 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
-  minio: 
-    build: 
-      context: ./
-      dockerfile: ./docker/minio/Dockerfile
-    volumes:
-      - ./data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-miniouser}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-miniopass}
+      - TERARIUM_USER=${TERARIUM_USER}
+      - TERARIUM_PASS=${TERARIUM_PASS}
+  # minio:
+  #   build: 
+  #     context: ./
+  #     dockerfile: ./docker/minio/Dockerfile
+  #   volumes:
+  #     - ./data:/data
+  #   ports:
+  #     - "9090:9000"
+  #     - "9091:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER:-miniouser}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-miniopass}
   redis:
     container_name: redis-climate-data
     image: redis
-    ports:
-      - "6379:6379"
+
+
 
