@@ -73,7 +73,7 @@ def construct_hmi_dataset(
         "source": ds.attrs.get("source", "UNKNOWN"),
         "grounding": {},
     }
-    print(f"dataset: {hmi_dataset["name"]}", flush=True)
+    print(f"dataset: {dataset_name}-subset-{subset_uuid}", flush=True)
     r = requests.post(
         f"{default_settings.terarium_url}/datasets",
         json=hmi_dataset,
