@@ -64,7 +64,7 @@ Output:
 """
 
 # cosine matching threshold to greedily take term
-GREEDY_EXTRACTION_THRESHOLD = 0.91
+GREEDY_EXTRACTION_THRESHOLD = 0.93
 
 SEARCH_FACETS = {
     # match by cosine similarity
@@ -171,6 +171,7 @@ class ESGFProvider(BaseSearchProvider):
         converts to natural language and runs the result against the ESGF node, returning a list of datasets.
         """
         search_terms_json = self.process_natural_language(search_query)
+        print(search_terms_json, flush=True)
         search_terms = json.loads(search_terms_json)
 
         query = self.generate_query_string(search_terms)
@@ -203,6 +204,7 @@ class ESGFProvider(BaseSearchProvider):
             temperature=0.7,
         )
         query = response.choices[0].message.content
+        query = query[query.find("{") :]
         return query
 
     def run_esgf_query(
@@ -306,9 +308,13 @@ class ESGFProvider(BaseSearchProvider):
         return embeddings
 
     def get_single_best_match(self, text, similar_fields):
-        most_similar = ("", 0.00)
-        for field in similar_fields:
-            embedding = self.get_embedding(text)
+        @dask.delayed
+        def get_best_match_from_field(self, text, field):
+            embedding = (
+                self.get_embedding(text)
+                if field != "source_id"
+                else self.get_embedding(text.upper())
+            )
             self.embeddings[field]["similarities"] = self.embeddings[field][
                 "embed"
             ].apply(lambda e: self.cosine_similarity(e, embedding))
@@ -320,9 +326,16 @@ class ESGFProvider(BaseSearchProvider):
             string = best_match.string.values[0]
             similarity = best_match.similarities.values[0]
             print(f"    {string} => {similarity}")
-            if similarity >= most_similar[1]:
-                most_similar = (string, similarity)
-        return most_similar
+            return (string, similarity)
+
+        results = map(
+            lambda x: get_best_match_from_field(self, text, x), similar_fields
+        )
+        computed: list = list(dask.compute(results))[0]
+        # sort by similarity value, descending
+        computed.sort(key=lambda x: x[1], reverse=True)
+        print(computed)
+        return computed[0] or ("", 0.00)
 
     def extract_relevant_description(self, description: str) -> List[str]:
         """
@@ -366,26 +379,24 @@ class ESGFProvider(BaseSearchProvider):
         conjoined_phrase, conjoined_similarity = self.get_single_best_match(
             " ".join(tokens), SEARCH_FACETS["similar"]
         )
-        if conjoined_similarity > GREEDY_EXTRACTION_THRESHOLD:
+        if conjoined_similarity > 0.935:
             print(
                 f"  greedily taking full phrase: {conjoined_phrase} at {conjoined_similarity}"
             )
             matched.append(conjoined_phrase)
             tokens = []
 
-        # clone tokens to remove during iteration
-        for t in tokens[:]:
-            # quick check for specific date field mentioned above in token splitting - check if
-            # it's the exact format and use it if so
+        # parallel inner iterator for tokens - refactor of "remove from leftover tokens,
+        # append to matched" workflow. returns (matched, fallback) to be zipped over;
+        # if matched, return (token, None), if fallback, return (None, (phrase, similarity))
+        @dask.delayed
+        def inner_iterator(t):
             if len(t) == 9 and t[0] == "v" and t[1:].isdigit():
                 print(f"  date match: {t}")
-                matched.append(t[1:])
-                tokens.remove(t)
-                continue
+                return (t[1:], None)
             if t in exact_match_values:
                 print(f"  exact match: {t}")
-                matched.append(t)
-                tokens.remove(t)
+                return (t, None)
             else:
                 print(f"  approximate matching for {t}")
                 phrase, similarity = self.get_single_best_match(
@@ -395,13 +406,20 @@ class ESGFProvider(BaseSearchProvider):
                     print(
                         f"    matched word {t} -> {phrase} over threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
                     )
-                    matched.append(phrase)
-                    tokens.remove(t)
+                    return (phrase, (phrase, similarity))
                 else:
                     print(
                         f"    closest match {t} -> {phrase} is under threshold {GREEDY_EXTRACTION_THRESHOLD}: {similarity}"
                     )
-                fallback_similarities.append((phrase, similarity))
+                return (None, (phrase, similarity))
+
+        # zip(*x) is inverse to zip(x) - filter nones, split the two lists that were done in parallel
+        results = list(dask.compute(map(inner_iterator, tokens[:])))[0]
+        matched, fallback_similarities = list(
+            map(lambda x: list(filter(lambda y: y is not None, x)), zip(*results))
+        )
+        # removed matched tokens. some require transformations, e.g. upper()
+        tokens = [t for t in tokens if t not in matched and t.upper() not in matched]
 
         if len(tokens) == 0:
             print(f"finalized search terms are {matched}")
@@ -415,6 +433,8 @@ class ESGFProvider(BaseSearchProvider):
 
         fallback_similarities = [f for f in fallback_similarities if f[0] in tokens]
         if len(fallback_similarities) == 0:
+            if conjoined_similarity >= 0.90:
+                matched.append(conjoined_phrase)
             return matched
 
         avg_sim = sum((map(lambda f: f[1], fallback_similarities))) / len(
