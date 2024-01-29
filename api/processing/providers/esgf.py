@@ -46,4 +46,4 @@ def slice_and_store_dataset(
         )
         return {"status": "ok", "dataset_id": hmi_id}
     except Exception as e:
-        return {"status": "failed", "error": e, "dataset_id": ""}
+        return {"status": "failed", "error": str(e), "dataset_id": ""}
