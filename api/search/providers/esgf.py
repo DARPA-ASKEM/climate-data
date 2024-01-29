@@ -165,15 +165,21 @@ class ESGFProvider(BaseSearchProvider):
         return self.get_access_urls_by_id(dataset.metadata["id"])
 
     def natural_language_search(
-        self, search_query: str, page: int
+        self, search_query: str, page: int, retries=0
     ) -> DatasetSearchResults:
         """
         converts to natural language and runs the result against the ESGF node, returning a list of datasets.
         """
         search_terms_json = self.process_natural_language(search_query)
         print(search_terms_json, flush=True)
-        search_terms = json.loads(search_terms_json)
-
+        try:
+            search_terms = json.loads(search_terms_json)
+        except ValueError as e:
+            print(f"openAI returned more than just json, retrying query... \n {e}")
+            if retries >= 3:
+                print("openAI returned non-json in multiple retries, exiting")
+                return []
+            return self.natural_language_search(search_query, page, retries + 1)
         query = self.generate_query_string(search_terms)
         options = self.generate_temporal_coverage_query(search_terms)
 
@@ -414,7 +420,9 @@ class ESGFProvider(BaseSearchProvider):
                 return (None, (phrase, similarity))
 
         # zip(*x) is inverse to zip(x) - filter nones, split the two lists that were done in parallel
-        results = list(dask.compute(map(inner_iterator, tokens[:])))[0]
+        results = list(list(dask.compute(map(inner_iterator, tokens[:])))[0])
+        if len(results) == 0:
+            return matched
         matched, fallback_similarities = list(
             map(lambda x: list(filter(lambda y: y is not None, x)), zip(*results))
         )
