@@ -34,6 +34,7 @@ def generate_description(
 def construct_hmi_dataset(
     ds: xarray.Dataset,
     dataset_id: str,
+    parent_dataset_id: str,
     subset_uuid: str,
     opts: DatasetSubsetOptions,
     username: str,
