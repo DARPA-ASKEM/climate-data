@@ -68,6 +68,7 @@ Required Parameters:
   * `dataset_id`: ID of the dataset provided by search in full format. 
 
 Optional Parameters:
+  * `parent_dataset_id`: Terarium parent dataset ID - retains provenance info stored in the metadata, so that the subset can keep a pointer to the original it was created from.
   * `timestamps`: 
     * String of two ISO-8601 timestamps or the terms `start` or `end` separated by commas.
     * Examples:

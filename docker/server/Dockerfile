@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y curl
 RUN pip install poetry
 RUN chown -R svc:svc /opt/climate-search
 COPY ./.cdsapirc /opt/climate-search/.cdsapirc
-RUN cp /opt/climate-search/.cdsapirc /home/svc/.cdsapirc && chmod 644 /home/svc/.cdsapirc && chown svc:svc /home/svc/.cdsapirc
+# RUN cp /opt/climate-search/.cdsapirc /home/svc/.cdsapirc && chmod 644 /home/svc/.cdsapirc && chown svc:svc /home/svc/.cdsapirc
 USER svc
 RUN poetry install
 # CMD nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0
