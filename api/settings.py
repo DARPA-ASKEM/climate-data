@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     default_facets: str = Field("project,experiment_family")
     entries_per_page: int = Field(20)
 
-    redis_host: Field(os.environ.get("REDIS_HOST", "redis-climate-data"))
-    redis_port: Field(os.environ.get("REDIS_HOST", 6379))
+    redis_host: str = Field(os.environ.get("REDIS_HOST", "redis-climate-data"))
+    redis_port: int = Field(os.environ.get("REDIS_PORT", 6379))
 
     minio_url: str = Field(os.environ.get("MINIO_URL", "http://minio:9000"))
     minio_user: str = Field(os.environ.get("MINIO_USER", "miniouser"))
