@@ -15,8 +15,8 @@ def get_redis():
 
 
 # from knowledge-middleware/api/utils.py:37
-def create_job(*, func, args, redis):
-    q = Queue(connection=redis, default_timeout=-1)
+def create_job(*, func, args, redis, queue="default"):
+    q = Queue(name=queue, connection=redis, default_timeout=-1)
     job_id = str(uuid.uuid4())
     job = q.enqueue(func, args=args, kwargs={"job_id": job_id}, job_id=job_id)
     status = job.get_status()

@@ -10,6 +10,7 @@ app = FastAPI(docs_url="/")
 client = OpenAI()
 
 esgf = ESGFProvider(client)
+esgf.initialize_embeddings()
 
 
 def params_to_dict(request: Request) -> Dict[str, str | List[str]]:
@@ -34,7 +35,10 @@ async def esgf_subset(request: Request, redis=Depends(get_redis), dataset_id: st
     params = params_to_dict(request)
     urls = esgf.get_access_urls_by_id(dataset_id)
     job = create_job(
-        func=slice_and_store_dataset, args=[urls, dataset_id, params], redis=redis
+        func=slice_and_store_dataset,
+        args=[urls, dataset_id, params],
+        redis=redis,
+        queue="subset",
     )
     return job
 
