@@ -1,3 +1,5 @@
+[![Build and Publish](https://github.com/DARPA-ASKEM/service-template/actions/workflows/publish.yaml/badge.svg?event=push)](https://github.com/DARPA-ASKEM/service-template/actions/workflows/publish.yaml)
+
 # climate-data 
 
 ## Endpoints
@@ -144,3 +146,6 @@ Output:
 
 The `urls` field specifically contains OPENDAP URLs which can be passed directly to `xarray.open_mfdataset()` for lazy network usage and disk usage. 
 
+## License
+
+[Apache License 2.0](LICENSE)

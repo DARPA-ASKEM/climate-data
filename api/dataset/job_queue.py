@@ -11,7 +11,7 @@ from api.settings import default_settings
 
 
 def get_redis():
-    return Redis(default_settings.redis["host"], default_settings.redis["port"])
+    return Redis(default_settings.redis_host, default_settings.redis_port)
 
 
 # from knowledge-middleware/api/utils.py:37

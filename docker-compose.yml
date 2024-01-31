@@ -1,7 +1,8 @@
+---
 version: '3'
 services:
   service:
-    build: 
+    build:
       context: ./
       dockerfile: ./docker/server/Dockerfile
     volumes:
@@ -15,10 +16,19 @@ services:
       - TERARIUM_USER=${TERARIUM_USER}
       - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
-      - redis 
-    entrypoint: "nohup poetry run uvicorn api.server:app --reload --host 0.0.0.0" 
+      - redis
+    entrypoint: [
+      "nohup",
+      "poetry",
+      "run",
+      "uvicorn",
+      "api.server:app",
+      "--reload",
+      "--host",
+      "0.0.0.0"
+    ]
   rq-worker:
-    build: 
+    build:
       context: ./
       dockerfile: ./docker/server/Dockerfile
     volumes:
@@ -29,12 +39,28 @@ services:
       - TERARIUM_USER=${TERARIUM_USER}
       - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
-      - redis 
-    # not sure why, but rq worker was not taking env vars from environment above. 
-    # wrap in shell call for workaround 
+      - redis
+    # not sure why, but rq worker was not taking env vars from environment
+    # above. wrap in shell call for workaround
+    # this is not identical to the linted list form due to shell string escapes 
     entrypoint: "nohup sh -c 'TERARIUM_USER=\"${TERARIUM_USER}\" TERARIUM_PASS=\"${TERARIUM_PASS}\" poetry run rq worker-pool subset preview -n5 -u redis://redis-climate-data:6379'" 
-  jupyter: 
-    build: 
+    # entrypoint: [
+    #   "nohup",
+    #   "sh",
+    #   "-c",
+    #   "TERARIUM_USER=\"${TERARIUM_USER}\"",
+    #   "TERARIUM_PASS=\"${TERARIUM_PASS}\"",
+    #   "poetry",
+    #   "run",
+    #   "rq",
+    #   "worker-pool",
+    #   "subset",
+    #   "preview",
+    #   "-u",
+    #   "redis://redis-climate-data:6379"
+    # ]
+  jupyter:
+    build:
       context: ./
       dockerfile: ./docker/jupyter/Dockerfile
     volumes:
@@ -48,7 +74,7 @@ services:
       - TERARIUM_USER=${TERARIUM_USER}
       - TERARIUM_PASS=${TERARIUM_PASS}
   # minio:
-  #   build: 
+  #   build:
   #     context: ./
   #     dockerfile: ./docker/minio/Dockerfile
   #   volumes:
@@ -62,6 +88,3 @@ services:
   redis:
     container_name: redis-climate-data
     image: redis
-
-
-
