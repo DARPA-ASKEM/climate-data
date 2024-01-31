@@ -47,6 +47,6 @@ target "climate-data-service-base" {
   dockerfile = "docker/server/Dockerfile"
 }
 
-target "NAME-service" {
+target "climate-data-service" {
   inherits = ["_platforms", "climate-data-service-base"]
 }
