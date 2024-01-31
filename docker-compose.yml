@@ -24,8 +24,9 @@ services:
       "uvicorn",
       "api.server:app",
       "--reload",
-      "--host 0.0.0.0"
-      ]
+      "--host",
+      "0.0.0.0"
+    ]
   rq-worker:
     build:
       context: ./
@@ -39,14 +40,22 @@ services:
       - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
       - redis
-    # not sure why, but rq worker was not taking env vars from environment above.
-    # wrap in shell call for workaround 
+    # not sure why, but rq worker was not taking env vars from environment
+    # above. wrap in shell call for workaround
     entrypoint: [
       "nohup",
       "sh",
       "-c",
-      "'TERARIUM_USER=\"${TERARIUM_USER}\" TERARIUM_PASS=\"${TERARIUM_PASS}\" poetry run rq worker -u redis://redis-climate-data:6379 --with-scheduler'"
-      ]
+      "TERARIUM_USER=\"${TERARIUM_USER}\"",
+      "TERARIUM_PASS=\"${TERARIUM_PASS}\"",
+      "poetry",
+      "run",
+      "rq",
+      "worker",
+      "-u",
+      "redis://redis-climate-data:6379",
+      "--with-scheduler"
+    ]
   jupyter:
     build:
       context: ./
