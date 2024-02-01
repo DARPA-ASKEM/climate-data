@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request, Depends
 from api.search.providers.esgf import ESGFProvider
-from api.processing.providers.esgf import slice_and_store_dataset
+from api.processing.providers.esgf import (
+    render_preview_for_dataset,
+    slice_and_store_dataset,
+)
 from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
@@ -10,6 +13,7 @@ app = FastAPI(docs_url="/")
 client = OpenAI()
 
 esgf = ESGFProvider(client)
+esgf.initialize_embeddings()
 
 
 def params_to_dict(request: Request) -> Dict[str, str | List[str]]:
@@ -34,7 +38,19 @@ async def esgf_subset(request: Request, redis=Depends(get_redis), dataset_id: st
     params = params_to_dict(request)
     urls = esgf.get_access_urls_by_id(dataset_id)
     job = create_job(
-        func=slice_and_store_dataset, args=[urls, dataset_id, params], redis=redis
+        func=slice_and_store_dataset,
+        args=[urls, dataset_id, params],
+        redis=redis,
+        queue="subset",
+    )
+    return job
+
+
+@app.get(path="/preview/esgf")
+async def esgf_preview(dataset_id: str, redis=Depends(get_redis)):
+    urls = esgf.get_access_urls_by_id(dataset_id)
+    job = create_job(
+        func=render_preview_for_dataset, args=[urls], redis=redis, queue="preview"
     )
     return job
 

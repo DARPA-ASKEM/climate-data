@@ -42,20 +42,23 @@ services:
       - redis
     # not sure why, but rq worker was not taking env vars from environment
     # above. wrap in shell call for workaround
-    entrypoint: [
-      "nohup",
-      "sh",
-      "-c",
-      "TERARIUM_USER=\"${TERARIUM_USER}\"",
-      "TERARIUM_PASS=\"${TERARIUM_PASS}\"",
-      "poetry",
-      "run",
-      "rq",
-      "worker",
-      "-u",
-      "redis://redis-climate-data:6379",
-      "--with-scheduler"
-    ]
+    # this is not identical to the linted list form due to shell string escapes 
+    entrypoint: "nohup sh -c 'TERARIUM_USER=\"${TERARIUM_USER}\" TERARIUM_PASS=\"${TERARIUM_PASS}\" poetry run rq worker-pool subset preview -n5 -u redis://redis-climate-data:6379'" 
+    # entrypoint: [
+    #   "nohup",
+    #   "sh",
+    #   "-c",
+    #   "TERARIUM_USER=\"${TERARIUM_USER}\"",
+    #   "TERARIUM_PASS=\"${TERARIUM_PASS}\"",
+    #   "poetry",
+    #   "run",
+    #   "rq",
+    #   "worker-pool",
+    #   "subset",
+    #   "preview",
+    #   "-u",
+    #   "redis://redis-climate-data:6379"
+    # ]
   jupyter:
     build:
       context: ./

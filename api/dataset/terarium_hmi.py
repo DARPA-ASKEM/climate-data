@@ -49,58 +49,64 @@ def construct_hmi_dataset(
         "dataSourceDate": ds.attrs.get("creation_date", "UNKNOWN"),
         "fileNames": [],
         "datasetUrl": ds.attrs.get("further_info_url", "UNKNOWN"),
-        "columns": [
-            {
-                "name": k,
-                "metadata": {
+        "format": "netcdf",
+        "metadata": {
+            "variableId": ds.attrs.get("variable_id", ""),
+            "subsetDetails": opts,
+            "dataStructure": {
+                k: {
                     "attrs": {
                         ak: ds[k].attrs[ak].item()
                         if isinstance(ds[k].attrs[ak], numpy.generic)
                         else ds[k].attrs[ak]
                         for ak in ds[k].attrs
+                        # _ChunkSizes is an unserializable ndarray, safely ignorable
+                        if ak != "_ChunkSizes"
                     },
                     "indexes": [i for i in ds[k].indexes.keys()],
                     "coordinates": [i for i in ds[k].coords.keys()],
-                },
-            }
-            for k in ds.variables.keys()
-        ],
-        "metadata": {
-            k: ds.attrs[k].item()
-            if isinstance(ds.attrs[k], numpy.generic)
-            else ds.attrs[k]
-            for k in ds.attrs.keys()
+                }
+                for k in ds.variables.keys()
+            },
+            "raw": {
+                k: ds.attrs[k].item()
+                if isinstance(ds.attrs[k], numpy.generic)
+                else ds.attrs[k]
+                for k in ds.attrs.keys()
+            },
         },
         "source": ds.attrs.get("source", "UNKNOWN"),
         "grounding": {},
     }
     print(f"dataset: {dataset_name}-subset-{subset_uuid}", flush=True)
-    r = requests.post(
-        f"{default_settings.terarium_url}/datasets",
-        json=hmi_dataset,
-        auth=terarium_auth,
-    )
+    print(f"{hmi_dataset}")
+    return "id"
+    # r = requests.post(
+    #     f"{default_settings.terarium_url}/datasets",
+    #     json=hmi_dataset,
+    #     auth=terarium_auth,
+    # )
 
-    if r.status_code != 201:
-        raise Exception(
-            f"failed to create dataset: POST /datasets: {r.status_code} {r.content}"
-        )
-    response = r.json()
-    hmi_id = response.get("id", "")
-    print(f"created dataset {hmi_id}")
-    if hmi_id == "":
-        raise Exception(f"failed to create dataset: id not found: {response}")
+    # if r.status_code != 201:
+    #     raise Exception(
+    #         f"failed to create dataset: POST /datasets: {r.status_code} {r.content}"
+    #     )
+    # response = r.json()
+    # hmi_id = response.get("id", "")
+    # print(f"created dataset {hmi_id}")
+    # if hmi_id == "":
+    #     raise Exception(f"failed to create dataset: id not found: {response}")
 
-    ds_url = f"{default_settings.terarium_url}/datasets/{hmi_id}/upload-file"
-    m = MultipartEncoder(fields={"file": ("filename", open(netcdf_path, "rb"))})
-    r = requests.put(
-        ds_url,
-        data=m,
-        params={"filename": netcdf_path},
-        headers={"Content-Type": m.content_type},
-        auth=terarium_auth,
-    )
-    if r.status_code != 200:
-        raise Exception(f"failed to upload file: {ds_url}: {r.status_code}")
+    # ds_url = f"{default_settings.terarium_url}/datasets/{hmi_id}/upload-file"
+    # m = MultipartEncoder(fields={"file": ("filename", open(netcdf_path, "rb"))})
+    # r = requests.put(
+    #     ds_url,
+    #     data=m,
+    #     params={"filename": netcdf_path},
+    #     headers={"Content-Type": m.content_type},
+    #     auth=terarium_auth,
+    # )
+    # if r.status_code != 200:
+    #     raise Exception(f"failed to upload file: {ds_url}: {r.status_code}")
 
-    return hmi_id
+    # return hmi_id
