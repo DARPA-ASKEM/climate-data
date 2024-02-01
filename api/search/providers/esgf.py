@@ -79,6 +79,7 @@ SEARCH_FACETS = {
         "activity_id",
         "nominal_resolution",
         "frequency",
+        "realm",
     ],
     # only take exact matches
     "exact": [
