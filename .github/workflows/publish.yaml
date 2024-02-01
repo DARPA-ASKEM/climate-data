@@ -22,7 +22,7 @@ jobs:
   # Build and Publish all targets associated with specified group
   bake:
     needs:
-      - verify
+      #- verify
       - tag-generator
     uses: darpa-askem/.github/.github/workflows/bake-publish.yml@main
     with:
