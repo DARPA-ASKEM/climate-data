@@ -7,6 +7,7 @@ from api.dataset.models import (
     TemporalSubsetOptions,
     ThinningSubsetOptions,
 )
+import pandas
 
 
 def location_bbox(
@@ -19,10 +20,12 @@ def location_bbox(
 
 def timestamps(dataset: xarray.Dataset, timestamps: List[str], field="time"):
     ts = timestamps[:]
+    print(ts)
     if ts[0] == "start":
-        ts[0] = "0000-01-01T00:00:00"
+        ts[0] = "0001-01"
     if ts[1] == "end":
-        ts[1] = "9999-01-01T00:00:00"
+        ts[1] = "9999-01"
+    print(ts, flush=True)
     return dataset.sel({field: slice(ts[0], ts[1])})
 
 

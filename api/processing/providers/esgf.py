@@ -17,11 +17,10 @@ def slice_esgf_dataset(
 
 
 def slice_and_store_dataset(
-    urls: List[str], dataset_id: str, params: Dict[str, Any], **kwargs
+    urls: List[str], parent_id: str, dataset_id: str, params: Dict[str, Any], **kwargs
 ):
     job_id = kwargs["job_id"]
     filename = f"cmip6-{job_id}.nc"
-    parent_dataset_id = params.get("parent_dataset_id", "")
     print(f"running job esgf subset job for: {job_id}", flush=True)
     ds = slice_esgf_dataset(urls, dataset_id, params)
     print(f"bytes: {ds.nbytes}", flush=True)
@@ -40,7 +39,7 @@ def slice_and_store_dataset(
         hmi_id = construct_hmi_dataset(
             ds,
             dataset_id,
-            parent_dataset_id,
+            parent_id,
             job_id,
             filters.options_from_url_parameters(params),
             "dataset-netcdf-testuser",

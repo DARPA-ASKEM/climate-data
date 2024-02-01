@@ -55,7 +55,10 @@ def render(
     # we're plotting x, y, time - others need to be shortened to the first element
     other_axes = [axis for axis in axes if axis not in ["X", "Y", "T"]]
     for axis in other_axes:
-        ds = ds.sel({axes[axis]: ds[axes[axis]][0]})
+        try:
+            ds = ds.sel({axes[axis]: ds[axes[axis]][0]})
+        except Exception as e:
+            print(f"failed to trim non-relevant axis {axis}: {ds[axes[axis]]}")
 
     ds = ds[variable_index]
 

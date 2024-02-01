@@ -14,11 +14,11 @@ from pathlib import Path
 import pickle
 
 NATURAL_LANGUAGE_PROCESSING_CONTEXT = """
-You are a tool to extract search terms by category from a given search request. 
+You are a tool to extract keyword search terms by category from a given search request. 
 
-The given fields are: frequency, nominal_resolution, lower_time_bound, upper_time_bound, and description.
+The given keyword fields are: frequency, nominal_resolution, lower_time_bound, upper_time_bound, and description.
 
-The definitions of the fields are as follows. 
+The definitions of the keyword fields are as follows. 
 
 frequency is a duration. 
 Possible example values for frequency values are: 6 hours, 6hrs, 3hr, daily, day, yearly, 12 hours, 12 hr
@@ -42,7 +42,6 @@ Examples of full processing are as follows.
 
 Input:
 100km before 2023 daily air temperature
-
 Output:
 {
     "frequency": "daily",
@@ -52,7 +51,6 @@ Output:
 }
 
 Input: 2x2 degree relative humidity between june 1997 and july 1999 6hr
-
 Output:
 {
     "frequency": "6hr",
@@ -61,6 +59,23 @@ Output:
     "upper_time_bound": "1999-07-00T00:00:00Z",
     "description": "relative humidity"
 }
+
+Input: ts
+Output: {
+    "description": "ts"
+}
+
+Input: Find me datasets with the variable relative humidity 
+Output: {
+    "description": "relative humidity"
+}
+
+Input: datasets before june 1995 the variable surface temperature model BCC-ESM1
+Output: {
+    "upper_time_bound": "1995-06-00T00:00:00Z",
+    "description": "surface temperature BCC-ESM1"
+}
+Only return JSON.
 """
 
 # cosine matching threshold to greedily take term
@@ -176,7 +191,9 @@ class ESGFProvider(BaseSearchProvider):
         try:
             search_terms = json.loads(search_terms_json)
         except ValueError as e:
-            print(f"openAI returned more than just json, retrying query... \n {e}")
+            print(
+                f"openAI returned more than just json, retrying query... \n {e} {search_terms_json}"
+            )
             if retries >= 3:
                 print("openAI returned non-json in multiple retries, exiting")
                 return []
@@ -211,6 +228,7 @@ class ESGFProvider(BaseSearchProvider):
             temperature=0.7,
         )
         query = response.choices[0].message.content
+        print(query)
         query = query[query.find("{") :]
         return query
 

@@ -43,18 +43,25 @@ def construct_hmi_dataset(
 ) -> str:
     terarium_auth = (default_settings.terarium_user, default_settings.terarium_pass)
     dataset_name = dataset_id.split("|")[0]
+    try:
+        preview = render(ds)
+    except Exception as e:
+        preview = ""
+        print(e, flush=True)
     hmi_dataset = {
         "userId": "",
         "name": f"{dataset_name}-subset-{subset_uuid}",
         "description": generate_description(ds, dataset_id, opts),
         "dataSourceDate": ds.attrs.get("creation_date", "UNKNOWN"),
         "fileNames": [],
+        "columns": [],
         "datasetUrl": ds.attrs.get("further_info_url", "UNKNOWN"),
-        "format": "netcdf",
         "metadata": {
+            "format": "netcdf",
+            "parentDatasetId": parent_dataset_id,
             "variableId": ds.attrs.get("variable_id", ""),
-            "subsetDetails": opts,
-            "preview": render(ds),
+            "subsetDetails": repr(opts),
+            "preview": preview,
             "dataStructure": {
                 k: {
                     "attrs": {

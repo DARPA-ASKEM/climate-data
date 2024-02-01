@@ -34,12 +34,14 @@ async def esgf_fetch(dataset_id: str = ""):
 
 
 @app.get(path="/subset/esgf")
-async def esgf_subset(request: Request, redis=Depends(get_redis), dataset_id: str = ""):
+async def esgf_subset(
+    request: Request, parent_id, dataset_id, redis=Depends(get_redis)
+):
     params = params_to_dict(request)
     urls = esgf.get_access_urls_by_id(dataset_id)
     job = create_job(
         func=slice_and_store_dataset,
-        args=[urls, dataset_id, params],
+        args=[urls, parent_id, dataset_id, params],
         redis=redis,
         queue="subset",
     )
