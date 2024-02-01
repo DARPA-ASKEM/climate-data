@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Request, Depends
 from api.search.providers.esgf import ESGFProvider
 from api.processing.providers.esgf import (
-    render_preview_for_dataset,
     slice_and_store_dataset,
 )
 from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
 from typing import List, Dict
+from api.preview.render import render_preview_for_dataset
 
 app = FastAPI(docs_url="/")
 client = OpenAI()

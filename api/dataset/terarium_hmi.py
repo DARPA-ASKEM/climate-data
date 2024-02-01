@@ -6,6 +6,7 @@ from api.settings import default_settings
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 import numpy
+from api.preview.render import render
 
 
 def generate_description(
@@ -53,6 +54,7 @@ def construct_hmi_dataset(
         "metadata": {
             "variableId": ds.attrs.get("variable_id", ""),
             "subsetDetails": opts,
+            "preview": render(ds),
             "dataStructure": {
                 k: {
                     "attrs": {
@@ -79,34 +81,33 @@ def construct_hmi_dataset(
         "grounding": {},
     }
     print(f"dataset: {dataset_name}-subset-{subset_uuid}", flush=True)
-    print(f"{hmi_dataset}")
-    return "id"
-    # r = requests.post(
-    #     f"{default_settings.terarium_url}/datasets",
-    #     json=hmi_dataset,
-    #     auth=terarium_auth,
-    # )
 
-    # if r.status_code != 201:
-    #     raise Exception(
-    #         f"failed to create dataset: POST /datasets: {r.status_code} {r.content}"
-    #     )
-    # response = r.json()
-    # hmi_id = response.get("id", "")
-    # print(f"created dataset {hmi_id}")
-    # if hmi_id == "":
-    #     raise Exception(f"failed to create dataset: id not found: {response}")
+    r = requests.post(
+        f"{default_settings.terarium_url}/datasets",
+        json=hmi_dataset,
+        auth=terarium_auth,
+    )
 
-    # ds_url = f"{default_settings.terarium_url}/datasets/{hmi_id}/upload-file"
-    # m = MultipartEncoder(fields={"file": ("filename", open(netcdf_path, "rb"))})
-    # r = requests.put(
-    #     ds_url,
-    #     data=m,
-    #     params={"filename": netcdf_path},
-    #     headers={"Content-Type": m.content_type},
-    #     auth=terarium_auth,
-    # )
-    # if r.status_code != 200:
-    #     raise Exception(f"failed to upload file: {ds_url}: {r.status_code}")
+    if r.status_code != 201:
+        raise Exception(
+            f"failed to create dataset: POST /datasets: {r.status_code} {r.content}"
+        )
+    response = r.json()
+    hmi_id = response.get("id", "")
+    print(f"created dataset {hmi_id}")
+    if hmi_id == "":
+        raise Exception(f"failed to create dataset: id not found: {response}")
 
-    # return hmi_id
+    ds_url = f"{default_settings.terarium_url}/datasets/{hmi_id}/upload-file"
+    m = MultipartEncoder(fields={"file": ("filename", open(netcdf_path, "rb"))})
+    r = requests.put(
+        ds_url,
+        data=m,
+        params={"filename": netcdf_path},
+        headers={"Content-Type": m.content_type},
+        auth=terarium_auth,
+    )
+    if r.status_code != 200:
+        raise Exception(f"failed to upload file: {ds_url}: {r.status_code}")
+
+    return hmi_id
