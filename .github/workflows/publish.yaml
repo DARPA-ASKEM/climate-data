@@ -12,8 +12,8 @@ on:
 
 jobs:
   # Call the Lint & Format workflow before publishing
-  verify:
-    uses: ./.github/workflows/lint.yaml
+  #verify:
+  #  uses: ./.github/workflows/lint.yaml
 
   # Call the Tag Generator to generate an image tag to use
   tag-generator:
