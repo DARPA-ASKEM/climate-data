@@ -1,4 +1,4 @@
-[![Build and Publish](https://github.com/DARPA-ASKEM/service-template/actions/workflows/publish.yaml/badge.svg?event=push)](https://github.com/DARPA-ASKEM/service-template/actions/workflows/publish.yaml)
+[![Build and Publish](https://github.com/DARPA-ASKEM/climate-data/actions/workflows/publish.yaml/badge.svg?event=push)](https://github.com/DARPA-ASKEM/climate-data/actions/workflows/publish.yaml)
 
 # climate-data 
 
