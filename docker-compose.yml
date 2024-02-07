@@ -33,6 +33,8 @@ services:
       dockerfile: ./docker/server/Dockerfile
     volumes:
       - ./api:/opt/climate-search/api
+    env_file:
+    - .env
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
@@ -73,6 +75,8 @@ services:
       - OPENAI_ORG_ID=${OPENAI_ORG_ID}
       - TERARIUM_USER=${TERARIUM_USER}
       - TERARIUM_PASS=${TERARIUM_PASS}
+    env_file:
+      - .env
   # minio:
   #   build:
   #     context: ./
