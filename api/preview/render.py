@@ -1,10 +1,11 @@
 import io
 import base64
+from api.search.provider import AccessURLs
 import cartopy.crs as ccrs
 import xarray
 from matplotlib import pyplot as plt
 from typing import List
-from api.dataset.remote import open_dataset
+from api.dataset.remote import cleanup_potential_artifacts, open_dataset
 
 
 def buffer_to_b64_png(buffer: io.BytesIO) -> str:
@@ -16,15 +17,18 @@ def buffer_to_b64_png(buffer: io.BytesIO) -> str:
 
 # handles loading as to not share xarray over rq-worker boundaries
 def render_preview_for_dataset(
-    urls: List[List[str]],
+    urls: AccessURLs,
     variable_index: str = "",
     time_index: str = "",
     timestamps: str = "",
     **kwargs,
 ):
+    job_id = kwargs["job_id"]
     try:
-        ds = open_dataset(urls)
-        return {"png": render(ds, variable_index, time_index, timestamps)}
+        ds = open_dataset(urls, job_id)
+        png = render(ds, variable_index, time_index, timestamps)
+        cleanup_potential_artifacts(job_id)
+        return {"png": png}
     except IOError as e:
         return {"error": f"upstream hosting is likely having a problem. {e}"}
 

@@ -1,5 +1,10 @@
 from api.settings import default_settings
-from api.search.provider import BaseSearchProvider, DatasetSearchResults, Dataset
+from api.search.provider import (
+    AccessURLs,
+    BaseSearchProvider,
+    DatasetSearchResults,
+    Dataset,
+)
 import requests
 from urllib.parse import urlencode
 from typing import List, Dict
@@ -142,7 +147,7 @@ class ESGFProvider(BaseSearchProvider):
             self.initialize_embeddings(force_refresh_cache)
         return self.natural_language_search(query, page)
 
-    def get_all_access_paths_by_id(self, dataset_id: str) -> List[List[str]]:
+    def get_all_access_paths_by_id(self, dataset_id: str) -> AccessURLs:
         return [
             self.get_access_paths_by_id(id)
             for id in self.get_mirrors_for_dataset(dataset_id)
@@ -155,7 +160,7 @@ class ESGFProvider(BaseSearchProvider):
         full_ids = [d.metadata["id"] for d in response]
         return full_ids
 
-    def get_access_paths_by_id(self, dataset_id: str) -> List[str]:
+    def get_access_paths_by_id(self, dataset_id: str) -> Dict[str, List[str]]:
         """
         returns a list of OPENDAP URLs for use in processing given a dataset.
         """
@@ -182,18 +187,24 @@ class ESGFProvider(BaseSearchProvider):
             raise ConnectionError(
                 f"Failed to extract files from dataset: empty list {full_url}"
             )
+
         # file url responses are lists of strings with their protocols separated by |
         # e.x. https://esgf-node.example|mimetype|OPENDAP
-        opendap_urls = [
-            url.split("|")[0]
-            for url in itertools.chain.from_iterable([f["url"] for f in files])
-            if "OPENDAP" in url
-        ]
-        # sometimes the opendap request form is returned. we strip the trailing suffix if needed
-        opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
-        return opendap_urls
+        def select(files, selector):
+            return [
+                url.split("|")[0]
+                for url in itertools.chain.from_iterable([f["url"] for f in files])
+                if selector in url
+            ]
 
-    def get_access_paths(self, dataset: Dataset) -> List[List[str]]:
+        http_urls = select(files, "HTTP")
+        # sometimes the opendap request form is returned. we strip the trailing suffix if needed
+        opendap_urls = select(files, "OPENDAP")
+        opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
+
+        return {"opendap": opendap_urls, "http": http_urls}
+
+    def get_access_paths(self, dataset: Dataset) -> AccessURLs:
         return self.get_all_access_paths_by_id(dataset.metadata["id"])
 
     def natural_language_search(
@@ -243,7 +254,7 @@ class ESGFProvider(BaseSearchProvider):
             ],
             temperature=0.7,
         )
-        query = response.choices[0].message.content
+        query = response.choices[0].message.content or ""
         print(query)
         query = query[query.find("{") :]
         return query

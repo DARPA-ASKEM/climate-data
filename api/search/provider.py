@@ -14,6 +14,7 @@ class Dataset:
 
 
 DatasetSearchResults = List[Dataset]
+AccessURLs = List[Dict[str, List[str]]]  # mirrors : [ method -> urls ]
 
 
 class BaseSearchProvider:
@@ -21,5 +22,5 @@ class BaseSearchProvider:
         return []
 
     # [mirrors... [dataset urls...]]
-    def get_access_paths(self, dataset: Dataset) -> List[List[str]]:
-        return []
+    def get_access_paths(self, dataset: Dataset) -> AccessURLs:
+        return {}

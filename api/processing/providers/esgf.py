@@ -1,12 +1,13 @@
+from api.search.provider import AccessURLs
 from .. import filters
 import xarray
 from typing import Any, Dict, List
 from api.dataset.terarium_hmi import construct_hmi_dataset
-from api.dataset.remote import open_dataset
+from api.dataset.remote import cleanup_potential_artifacts, open_dataset
 
 
 def slice_esgf_dataset(
-    urls: List[List[str]], dataset_id: str, params: Dict[str, Any]
+    urls: AccessURLs, dataset_id: str, params: Dict[str, Any]
 ) -> xarray.Dataset:
     ds = open_dataset(urls)
     options = filters.options_from_url_parameters(params)
@@ -15,7 +16,7 @@ def slice_esgf_dataset(
 
 
 def slice_and_store_dataset(
-    urls: List[List[str]],
+    urls: AccessURLs,
     parent_id: str,
     dataset_id: str,
     params: Dict[str, Any],
@@ -56,3 +57,5 @@ def slice_and_store_dataset(
         return {"status": "ok", "dataset_id": hmi_id}
     except Exception as e:
         return {"status": "failed", "error": str(e), "dataset_id": ""}
+    finally:
+        cleanup_potential_artifacts(job_id)
