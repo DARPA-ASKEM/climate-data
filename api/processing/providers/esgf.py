@@ -1,7 +1,7 @@
 from api.search.provider import AccessURLs
 from .. import filters
 import xarray
-from typing import Any, Dict, List
+from typing import Any, Dict
 from api.dataset.terarium_hmi import construct_hmi_dataset
 from api.dataset.remote import cleanup_potential_artifacts, open_dataset
 

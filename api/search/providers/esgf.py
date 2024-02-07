@@ -132,7 +132,12 @@ class ESGFProvider(BaseSearchProvider):
         else:
             print("no embedding cache, generating new", flush=True)
             with cache.open(mode="wb") as f:
-                self.embeddings = self.extract_embedding_strings()
+                try:
+                    self.embeddings = self.extract_embedding_strings()
+                except Exception as e:
+                    raise IOError(
+                        f"failed to access OpenAI: is OPENAI_API_KEY set in env?: {e}"
+                    )
                 pickle.dump(self.embeddings, f)
 
     def search(
