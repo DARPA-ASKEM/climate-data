@@ -2,6 +2,9 @@ from typing import List, Dict, Any
 from dask.delayed import Delayed
 import dask
 
+# consistent interface for handling search results and paths
+# across multiple sources.
+
 
 class Dataset:
     metadata: Dict[str, Any]  # json
@@ -17,5 +20,6 @@ class BaseSearchProvider:
     def search(self, query: str, page: int) -> DatasetSearchResults:
         return []
 
-    def get_access_urls(self, dataset: Dataset) -> List[str]:
+    # [mirrors... [dataset urls...]]
+    def get_access_paths(self, dataset: Dataset) -> List[List[str]]:
         return []

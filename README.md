@@ -60,6 +60,19 @@ Each dataset contains a `metadata` field.
 
 The `metadata` field contains an `id` field that is used for subsequent processing and lookups, containing the full dataset ID with revision and node information, such as: `CMIP6.CMIP.NCAR.CESM2.historical.r11i1p1f1.CFday.ua.gn.v20190514|esgf-data.ucar.edu`
 
+#### Preview
+
+`/preview/esgf`
+
+Required Parameters:
+  * `dataset_id`: ID of the dataset provided by search in full format. 
+
+Optional Parameters:
+  * `variable_id`: override the variable to render in the preview. 
+  * `timestamps`: plot over a list of times. much slower, work in progress 
+  * `time_index`: override time index to use. 
+
+
 #### Subset 
 
 `/subset/esgf`

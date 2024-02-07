@@ -4,7 +4,7 @@ import cartopy.crs as ccrs
 import xarray
 from matplotlib import pyplot as plt
 from typing import List
-from api.dataset.remote import open_remote_dataset
+from api.dataset.remote import open_dataset
 
 
 def buffer_to_b64_png(buffer: io.BytesIO) -> str:
@@ -16,14 +16,17 @@ def buffer_to_b64_png(buffer: io.BytesIO) -> str:
 
 # handles loading as to not share xarray over rq-worker boundaries
 def render_preview_for_dataset(
-    urls: List[str],
+    urls: List[List[str]],
     variable_index: str = "",
     time_index: str = "",
     timestamps: str = "",
     **kwargs,
 ):
-    ds = open_remote_dataset(urls)
-    return {"png": render(ds, variable_index, time_index, timestamps)}
+    try:
+        ds = open_dataset(urls)
+        return {"png": render(ds, variable_index, time_index, timestamps)}
+    except IOError as e:
+        return {"error": f"upstream hosting is likely having a problem. {e}"}
 
 
 def render(
@@ -53,12 +56,15 @@ def render(
         ds = ds.sel({time_index: slice(timestamps.split(","))})
 
     # we're plotting x, y, time - others need to be shortened to the first element
+    print(axes, flush=True)
     other_axes = [axis for axis in axes if axis not in ["X", "Y", "T"]]
     for axis in other_axes:
         try:
             ds = ds.sel({axes[axis]: ds[axes[axis]][0]})
         except Exception as e:
-            print(f"failed to trim non-relevant axis {axis}: {ds[axes[axis]]}")
+            print(
+                f"failed to trim non-relevant axis {axis}: {ds[axes[axis]]}: {e}: (this can be safely ignored if expected)"
+            )
 
     ds = ds[variable_index]
 

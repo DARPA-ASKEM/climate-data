@@ -142,16 +142,32 @@ class ESGFProvider(BaseSearchProvider):
             self.initialize_embeddings(force_refresh_cache)
         return self.natural_language_search(query, page)
 
-    def get_access_urls_by_id(self, dataset_id: str) -> List[str]:
+    def get_all_access_paths_by_id(self, dataset_id: str) -> List[List[str]]:
+        return [
+            self.get_access_paths_by_id(id)
+            for id in self.get_mirrors_for_dataset(dataset_id)
+        ]
+
+    def get_mirrors_for_dataset(self, dataset_id: str) -> List[str]:
+        # strip vert bar if provided with example mirror attached
+        dataset_id = dataset_id.split("|")[0]
+        response = self.run_esgf_query(f"id:{dataset_id}*", 1, {})
+        full_ids = [d.metadata["id"] for d in response]
+        return full_ids
+
+    def get_access_paths_by_id(self, dataset_id: str) -> List[str]:
         """
         returns a list of OPENDAP URLs for use in processing given a dataset.
         """
+        if dataset_id == "":
+            return []
+        self.get_mirrors_for_dataset(dataset_id)
         params = urlencode(
             {
                 "type": "File",
                 "format": "application/solr+json",
                 "dataset_id": dataset_id,
-                "limit": 50,
+                "limit": 200,
             }
         )
         full_url = f"{default_settings.esgf_url}/search?{params}"
@@ -177,8 +193,8 @@ class ESGFProvider(BaseSearchProvider):
         opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
         return opendap_urls
 
-    def get_access_urls(self, dataset: Dataset) -> List[str]:
-        return self.get_access_urls_by_id(dataset.metadata["id"])
+    def get_access_paths(self, dataset: Dataset) -> List[List[str]]:
+        return self.get_all_access_paths_by_id(dataset.metadata["id"])
 
     def natural_language_search(
         self, search_query: str, page: int, retries=0

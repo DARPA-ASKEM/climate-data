@@ -7,7 +7,6 @@ from api.dataset.models import (
     TemporalSubsetOptions,
     ThinningSubsetOptions,
 )
-import pandas
 
 
 def location_bbox(
