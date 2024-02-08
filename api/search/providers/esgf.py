@@ -1,3 +1,4 @@
+import re
 from api.settings import default_settings
 from api.search.provider import (
     AccessURLs,
@@ -139,6 +140,13 @@ class ESGFProvider(BaseSearchProvider):
                         f"failed to access OpenAI: is OPENAI_API_KEY set in env?: {e}"
                     )
                 pickle.dump(self.embeddings, f)
+
+    def is_terarium_hmi_dataset(self, dataset_id: str) -> bool:
+        """
+        checks if a dataset id is HMI or ESGF - uuid regex
+        """
+        p = re.compile(r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$")
+        return bool(p.match(dataset_id.lower()))
 
     def search(
         self, query: str, page: int, force_refresh_cache: bool = False

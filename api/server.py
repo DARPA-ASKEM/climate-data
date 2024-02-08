@@ -7,7 +7,7 @@ from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
 from typing import List, Dict
-from api.preview.render import render_preview_for_dataset
+from api.preview.render import render_preview_for_dataset, render_preview_for_hmi
 
 app = FastAPI(docs_url="/")
 client = OpenAI()
@@ -50,11 +50,18 @@ async def esgf_subset(
 
 @app.get(path="/preview/esgf")
 async def esgf_preview(dataset_id: str, redis=Depends(get_redis)):
-    urls = esgf.get_all_access_paths_by_id(dataset_id)
-    job = create_job(
-        func=render_preview_for_dataset, args=[urls], redis=redis, queue="preview"
-    )
-    return job
+    if esgf.is_terarium_hmi_dataset(dataset_id):
+        print("terarium uuid found", flush=True)
+        job = create_job(
+            func=render_preview_for_hmi, args=[dataset_id], redis=redis, queue="preview"
+        )
+        return job
+    else:
+        urls = esgf.get_all_access_paths_by_id(dataset_id)
+        job = create_job(
+            func=render_preview_for_dataset, args=[urls], redis=redis, queue="preview"
+        )
+        return job
 
 
 @app.get(path="/status/{job_id}")

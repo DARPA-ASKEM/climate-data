@@ -5,7 +5,11 @@ import cartopy.crs as ccrs
 import xarray
 from matplotlib import pyplot as plt
 from typing import List
-from api.dataset.remote import cleanup_potential_artifacts, open_dataset
+from api.dataset.remote import (
+    cleanup_potential_artifacts,
+    open_dataset,
+    open_remote_dataset_hmi,
+)
 
 
 def buffer_to_b64_png(buffer: io.BytesIO) -> str:
@@ -31,6 +35,17 @@ def render_preview_for_dataset(
         return {"png": png}
     except IOError as e:
         return {"error": f"upstream hosting is likely having a problem. {e}"}
+
+
+def render_preview_for_hmi(uuid: str, **kwargs):
+    job_id = kwargs["job_id"]
+    try:
+        ds = open_remote_dataset_hmi(uuid, job_id)
+        png = render(ds=ds)
+        cleanup_potential_artifacts(job_id)
+        return {"png": png}
+    except IOError as e:
+        return {"error": f"failed with error {e}"}
 
 
 def render(

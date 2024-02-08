@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import glob
 import xarray
-from typing import List
+from typing import List, Tuple
 from api.search.provider import AccessURLs
 from api.settings import default_settings
 import os
@@ -71,7 +71,9 @@ def open_dataset(paths: AccessURLs, job_id=None) -> xarray.Dataset:
                 raise IOError(
                     "http downloads must have an associated job id for cleanup purposes"
                 )
-            ds = open_remote_dataset_http(http_urls, job_id)
+            ds = open_remote_dataset_http(
+                http_urls, job_id, default_settings.esgf_openid
+            )
             return ds
         except IOError as e:
             print(f"failed to download via plain http: {e}")
@@ -96,10 +98,10 @@ def open_remote_dataset_s3(urls: List[str]) -> xarray.Dataset:
     return xarray.merge(files)
 
 
-def download_file_http(url: str, dir: str):
+def download_file_http(url: str, dir: str, auth: Tuple[str, str] | None = None):
     rs = requests.get(url, stream=True)
     if rs.status_code == 401:
-        rs = requests.get(url, stream=True, auth=default_settings.esgf_openid)
+        rs = requests.get(url, stream=True, auth=auth)
     filename = url.split("/")[-1]
     print("writing ", os.path.join(dir, filename))
     with open(os.path.join(dir, filename), mode="wb") as file:
@@ -107,12 +109,14 @@ def download_file_http(url: str, dir: str):
             file.write(chunk)
 
 
-def open_remote_dataset_http(urls: List[str], job_id) -> xarray.Dataset:
+def open_remote_dataset_http(
+    urls: List[str], job_id: str, auth: Tuple[str, str]
+) -> xarray.Dataset:
     temp_directory = os.path.join(".", str(job_id))
     if not os.path.exists(temp_directory):
         os.makedirs(temp_directory)
     with ThreadPoolExecutor() as executor:
-        executor.map(lambda url: download_file_http(url, temp_directory), urls)
+        executor.map(lambda url: download_file_http(url, temp_directory, auth), urls)
     files = [os.path.join(temp_directory, f) for f in os.listdir(temp_directory)]
     ds = xarray.open_mfdataset(
         files,
@@ -132,3 +136,24 @@ def cleanup_potential_artifacts(job_id):
         for file in glob.glob(os.path.join(temp_directory, "*.nc")):
             os.remove(file)
         os.removedirs(temp_directory)
+
+
+def open_remote_dataset_hmi(dataset_id: str, job_id: str) -> xarray.Dataset:
+    base_url = f"{default_settings.terarium_url}/datasets/{dataset_id}"
+    auth = (default_settings.terarium_user, default_settings.terarium_pass)
+    response = requests.get(base_url, auth=auth)
+    if response.status_code != 200:
+        errors = {
+            204: "does not exist (204)",
+            400: "malformed request (400)",
+            500: "upstream error (500)",
+            401: "auth error (401)",
+        }
+        msg = errors.get(response.status_code, f"unknown error {response.status_code}")
+        raise IOError(f"Dataset not found: {msg}")
+    filenames = response.json().get("fileNames", [])
+    if len(filenames) == 0:
+        raise IOError("Dataset has no associated files")
+    filenames = [f"{base_url}/download-file?filename={f}" for f in filenames]
+
+    return open_remote_dataset_http(filenames, job_id, auth)
