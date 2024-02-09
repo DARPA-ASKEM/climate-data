@@ -59,7 +59,7 @@ def open_dataset(paths: AccessURLs, job_id=None) -> xarray.Dataset:
         # function handles stripping out url part, so any mirror will have the same result
         ds = open_remote_dataset_s3(paths[0]["opendap"])
         return ds
-    except IOError as e:
+    except ValueError as e:
         print(f"file not found in s3 mirroring: {e}")
 
     for mirror in paths:
@@ -99,6 +99,7 @@ def open_remote_dataset_s3(urls: List[str]) -> xarray.Dataset:
 
 
 def download_file_http(url: str, dir: str, auth: Tuple[str, str] | None = None):
+    print(f"downloading file {url}", flush=True)
     rs = requests.get(url, stream=True)
     if rs.status_code == 401:
         rs = requests.get(url, stream=True, auth=auth)
@@ -118,6 +119,7 @@ def open_remote_dataset_http(
     with ThreadPoolExecutor() as executor:
         executor.map(lambda url: download_file_http(url, temp_directory, auth), urls)
     files = [os.path.join(temp_directory, f) for f in os.listdir(temp_directory)]
+    print(f"files: {files}", flush=True)
     ds = xarray.open_mfdataset(
         files,
         parallel=True,
