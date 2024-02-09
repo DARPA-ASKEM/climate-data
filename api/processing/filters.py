@@ -10,7 +10,7 @@ from api.dataset.models import (
 
 
 def location_bbox(
-    dataset: xarray.Dataset, bounding_box: List[float], fields=["lat", "lon"]
+    dataset: xarray.Dataset, bounding_box: List[float], fields=["lon", "lat"]
 ):
     return dataset.sel({fields[0]: slice(bounding_box[0], bounding_box[1])}).sel(
         {fields[1]: slice(bounding_box[2], bounding_box[3])}

@@ -2,6 +2,11 @@
 
 # climate-data 
 
+On first container launch, caching data for search will be created - this may take around a minute. 
+
+## Requirements
+* **ERA5** data requires a `.cdsapirc` file in the user's home directory with an API key to run requests. This is copied from the root of the project at build and .gitignored away from being committed on accident. The API key can be acquired [here](https://cds.climate.copernicus.eu/api-how-to). You have to accept an online form while logged in to make the key "live" otherwise it will throw an exception. 
+
 ## Endpoints
 
 `/status/<uuid>`
@@ -91,10 +96,10 @@ Optional Parameters:
       * `timestamps=start,2010-01-01T00:00:00`
       * `timestamps=1999-01-01T00:00:00,end`
   * `envelope`:
-    * Geographical envelope provided as a comma-separated series of 4 degrees: lat, lat, lon, lon. 
+    * Geographical envelope provided as a comma-separated series of 4 degrees: lon, lon, lat, lat. 
     * Examples:
       * `envelope=90,95,90,100`
-        * Restrict output data to the latitude range [90 deg, 95 deg] and longitude range [90 deg, 100 deg]
+        * Restrict output data to the longitude range [90 deg, 95 deg] and latitude range [90 deg, 100 deg]
   * `thin_factor`:
     * Take every nth datapoint along specified fields given by `thin_fields` (defaulting to all).
     * Examples:

@@ -1,8 +1,14 @@
 from api.search.provider import BaseSearchProvider, DatasetSearchResults, Dataset
-from api.settings import default_settings
 import ast
 from openai import OpenAI
 from typing import List
+from pydantic import BaseModel, Field
+
+
+class ERA5SearchData(BaseModel):
+    dataset_name: str = Field()
+    product_type: str = Field()
+    variable: str = Field()
 
 
 class ERA5ApiCallNodeVisitor(ast.NodeVisitor):
@@ -11,6 +17,12 @@ class ERA5ApiCallNodeVisitor(ast.NodeVisitor):
     for storage, rather than keeping a chunk to eval - easier to reconstitute and make changes from
     frontend arguments for subsetting.
     """
+
+    output: ERA5SearchData | None
+
+    def __init__(self):
+        self.output = None
+        super()
 
     def visit_Call(self, node):
         if isinstance(node.func.value, ast.Name) and node.func.attr == "retrieve":
@@ -25,12 +37,17 @@ class ERA5ApiCallNodeVisitor(ast.NodeVisitor):
             api_arguments = eval(
                 compile(ast.Expression(args[1]), "<ast dictionary>", "eval")
             )
-            filename = args[2].value
-            return (dataset_name, api_arguments, filename)
+            self.output = ERA5SearchData(
+                dataset_name=dataset_name,
+                product_type=api_arguments["product_type"],
+                variable=api_arguments["variable"],
+            )
+            # break and stop traversal - return != return None here! likely a misuse of the NodeVisitor api.
+            return None
         self.generic_visit(node)
 
 
-class ERA5(BaseSearchProvider):
+class ERA5Provider(BaseSearchProvider):
     def __init__(self, openai_client):
         print("initializing ERA5 search provider")
         self.client: OpenAI = openai_client
@@ -44,10 +61,16 @@ class ERA5(BaseSearchProvider):
         will construct it from that data. not quite ideal, but ERA5 is not fun to work with
         """
         code_output = self.natural_language_search(query)
-        retrieve_call = code_output[code_output.find("c.retrieve(") :]
+        retrieve_call = code_output[code_output.find("c.retrieve(") :].replace(
+            "```", ""
+        )
+        print(retrieve_call, flush=True)
         visitor = ERA5ApiCallNodeVisitor()
-        (name, args, filename) = visitor.visit(ast.parse(retrieve_call))
-        return [Dataset(dict(dataset_name=name, arguments=args, filename=filename))]
+        visitor.visit(ast.parse(retrieve_call))
+        data = visitor.output
+        if data is None:
+            raise IOError("failed to walk and get data from ast: None in result")
+        return [Dataset(data.dict())]
 
     def generate_natural_language_context(self, search: str):
         return f"""

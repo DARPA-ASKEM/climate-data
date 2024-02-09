@@ -5,6 +5,12 @@ from typing import Dict, List
 from pydantic import BaseModel, Field
 
 
+# for hmi-server specialization
+class DatasetType(Enum):
+    esgf = "esgf"
+    era5 = "era5"
+
+
 class Status(Enum):
     started = "started"
     finished = "finished"
@@ -37,7 +43,7 @@ class TemporalSubsetOptions(BaseModel):
 
 class GeospatialSubsetOptions(BaseModel):
     envelope: List[float]
-    fields: List[str] = ["lat", "lon"]
+    fields: List[str] = ["lon", "lat"]
 
 
 class ThinningSubsetOptions(BaseModel):

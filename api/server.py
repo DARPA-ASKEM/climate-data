@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request, Depends
+from api.processing.providers.era5 import download_era5_subset, era5_subset_job
+from api.search.providers.era5 import ERA5Provider, ERA5SearchData
 from api.search.providers.esgf import ESGFProvider
 from api.processing.providers.esgf import (
     slice_and_store_dataset,
@@ -15,15 +17,28 @@ client = OpenAI()
 esgf = ESGFProvider(client)
 esgf.initialize_embeddings()
 
+era5 = ERA5Provider(client)
+
 
 def params_to_dict(request: Request) -> Dict[str, str | List[str]]:
     lists = parse_qs(request.url.query, keep_blank_values=True)
     return {k: v[0] if len(v) == 1 else v for k, v in lists.items()}
 
 
+@app.get(path="/status/{job_id}")
+async def job_status(job_id: str, redis=Depends(get_redis)):
+    return fetch_job_status(job_id, redis=redis)
+
+
 @app.get("/search/esgf")
 async def esgf_search(query: str = "", page: int = 1, refresh_cache=False):
     datasets = esgf.search(query, page, refresh_cache)
+    return {"results": datasets}
+
+
+@app.get("/search/era5")
+async def era5_search(query: str = ""):
+    datasets = era5.search(query)
     return {"results": datasets}
 
 
@@ -48,6 +63,30 @@ async def esgf_subset(
     return job
 
 
+@app.get(path="/subset/era5")
+async def era5_subset(
+    parent_id: str,
+    dataset_name: str,
+    product_type: str,
+    variable: str,
+    days: str,
+    months: str,
+    years: str,
+    hours: str,
+    redis=Depends(get_redis),
+):
+    sd = ERA5SearchData(
+        dataset_name=dataset_name, product_type=product_type, variable=variable
+    )
+    job = create_job(
+        func=era5_subset_job,
+        args=[sd, parent_id, days, months, years, hours],
+        redis=redis,
+        queue="subset",
+    )
+    return job
+
+
 @app.get(path="/preview/esgf")
 async def esgf_preview(dataset_id: str, redis=Depends(get_redis)):
     if esgf.is_terarium_hmi_dataset(dataset_id):
@@ -62,8 +101,3 @@ async def esgf_preview(dataset_id: str, redis=Depends(get_redis)):
             func=render_preview_for_dataset, args=[urls], redis=redis, queue="preview"
         )
         return job
-
-
-@app.get(path="/status/{job_id}")
-async def job_status(job_id: str, redis=Depends(get_redis)):
-    return fetch_job_status(job_id, redis=redis)
