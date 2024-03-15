@@ -55,7 +55,7 @@ def slice_and_store_dataset(
             filters.options_from_url_parameters(params),
         )
         hmi_id = post_hmi_dataset(dataset, filename)
-        return {"status": "ok", "dataset_id": hmi_id}
+        return {"status": "ok", "dataset_id": hmi_id, "filename": filename}
     except Exception as e:
         return {"status": "failed", "error": str(e), "dataset_id": ""}
     finally:
