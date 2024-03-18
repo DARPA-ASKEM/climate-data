@@ -46,7 +46,9 @@ def enumerate_dataset_skeleton(ds: xarray.Dataset, parent_id: str) -> HMIDataset
     note: continues on preview not working with an exception!
     """
     try:
-        preview = render(ds)
+        start = ds.isel(time=0).time.item().year
+        end = ds.isel(time=-1).time.item().year
+        preview = render(ds, timestamps=f"{start},{end}")
     except Exception as e:
         preview = f"error creating preview: {e}"
         print(e, flush=True)
