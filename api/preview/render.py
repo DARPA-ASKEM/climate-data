@@ -43,7 +43,7 @@ def render_preview_for_dataset(
         try:
             png = render(ds, variable_index, time_index, timestamps)
         except KeyError as e:
-            return {"error": e}
+            return {"error": f"{e}"}
         cleanup_potential_artifacts(job_id)
         return {"previews": png}
     except IOError as e:
@@ -51,13 +51,14 @@ def render_preview_for_dataset(
 
 
 def render(
-    ds,
+    ds: xarray.Dataset,
     variable_index: str = "",
     time_index: str = "",
     timestamps: str = "",
     **kwargs,
 ) -> list[dict[str, str]]:
     axes = {}
+
     for v in ds.variables.keys():
         if "axis" in ds[v].attrs:
             axes[ds[v].attrs["axis"]] = v
@@ -71,6 +72,12 @@ def render(
                 time_index = axes["T"]
             else:
                 raise IOError("Dataset has no time axis, please provide time index")
+
+    # fix nonmonotonic time series without changing original data
+    print("cleaning up duplicates...", flush=True)
+    ds = ds.drop_duplicates(time_index, keep="first")
+    print("cleaned up duplicates.", flush=True)
+
     if timestamps == "":
         ds = ds.sel({time_index: ds[time_index][0]})
     else:
@@ -79,6 +86,7 @@ def render(
             ds = ds.sel({time_index: slice(*ts)})
         except KeyError as e:
             msg = f"failed to create valid timestamp range: {e}"
+            print(msg, flush=True)
             raise KeyError(msg)
     # we're plotting x, y, time - others need to be shortened to the first element
     print(axes, flush=True)
@@ -91,7 +99,7 @@ def render(
                 f"failed to trim non-relevant axis {axis}: {ds[axes[axis]]}: {e}: (this can be safely ignored if expected)"
             )
 
-    ds = ds[variable_index]
+    ds = ds[variable_index]  # type: ignore
 
     preview_buffers: list[tuple[str, io.BytesIO]] = []
 
@@ -107,6 +115,7 @@ def render(
         ax.coastlines()
         buffer = io.BytesIO()
         plt.savefig(buffer, format="png")
+        plt.close()
         return buffer
 
     if axes["T"] in ds.dims:
@@ -135,13 +144,13 @@ def render(
 
             data = ds.isel({axes["T"]: index})
             date = data[axes["T"]].item()
-            print(f"rendering: {date}")
+            print(f"rendering: {date}", flush=True)
             last_year = date.year
             preview_buffers.append((date.year, make_plot(data)))
     else:
         # single element rather than list
         year = ds[axes["T"]].item().year
-        print(f"rendering: {year}")
+        print(f"rendering: {year}:", flush=True)
         preview_buffers.append((year, make_plot(ds)))
     renders = [{"year": y, "image": buffer_to_b64_png(b)} for (y, b) in preview_buffers]
     print(f"created {len(renders)} previews", flush=True)

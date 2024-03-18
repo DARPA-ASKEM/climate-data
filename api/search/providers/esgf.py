@@ -178,7 +178,7 @@ class ESGFProvider(BaseSearchProvider):
         returns a list of OPENDAP URLs for use in processing given a dataset.
         """
         if dataset_id == "":
-            return []
+            return {}
         self.get_mirrors_for_dataset(dataset_id)
         params = urlencode(
             {
