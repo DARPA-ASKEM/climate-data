@@ -40,7 +40,10 @@ def render_preview_for_dataset(
                 return {
                     "error": f"invalid timestamps '{timestamps}'. ensure it is two timestamps, comma separated"
                 }
-        png = render(ds, variable_index, time_index, timestamps)
+        try:
+            png = render(ds, variable_index, time_index, timestamps)
+        except KeyError as e:
+            return {"error": e}
         cleanup_potential_artifacts(job_id)
         return {"previews": png}
     except IOError as e:
@@ -72,8 +75,11 @@ def render(
         ds = ds.sel({time_index: ds[time_index][0]})
     else:
         ts = [t.strip() for t in timestamps.split(",")]
-        ds = ds.sel({time_index: slice(*ts)})
-
+        try:
+            ds = ds.sel({time_index: slice(*ts)})
+        except KeyError as e:
+            msg = f"failed to create valid timestamp range: {e}"
+            raise KeyError(msg)
     # we're plotting x, y, time - others need to be shortened to the first element
     print(axes, flush=True)
     other_axes = [axis for axis in axes if axis not in ["X", "Y", "T"]]
