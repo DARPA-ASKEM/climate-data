@@ -43,20 +43,24 @@ async def era5_search(query: str = ""):
 
 
 @app.get("/fetch/esgf")
-async def esgf_fetch(dataset_id):
+async def esgf_fetch(dataset_id: str):
     urls = esgf.get_all_access_paths_by_id(dataset_id)
     return {"dataset": dataset_id, "urls": urls}
 
 
 @app.get(path="/subset/esgf")
 async def esgf_subset(
-    request: Request, parent_id, dataset_id, redis=Depends(get_redis)
+    request: Request,
+    parent_id: str,
+    dataset_id: str,
+    variable_id: str = "",
+    redis=Depends(get_redis),
 ):
     params = params_to_dict(request)
     urls = esgf.get_all_access_paths_by_id(dataset_id)
     job = create_job(
         func=slice_and_store_dataset,
-        args=[urls, parent_id, dataset_id, params],
+        args=[urls, parent_id, dataset_id, params, variable_id],
         redis=redis,
         queue="subset",
     )
@@ -90,7 +94,7 @@ async def era5_subset(
 @app.get(path="/preview/esgf")
 async def esgf_preview(
     dataset_id: str,
-    variable_index: str = "",
+    variable_id: str = "",
     time_index: str = "",
     timestamps: str = "",
     redis=Depends(get_redis),
@@ -102,7 +106,7 @@ async def esgf_preview(
     )
     job = create_job(
         func=render_preview_for_dataset,
-        args=[dataset, variable_index, time_index, timestamps],
+        args=[dataset, variable_id, time_index, timestamps],
         redis=redis,
         queue="preview",
     )
