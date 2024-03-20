@@ -164,7 +164,8 @@ Output:
     "urls": [
         "http://esgf-data.node.example/...",
         "http://esgf-data.node.example/..."
-    ]
+    ],
+    "metadata": {}
 }
 ```
 
