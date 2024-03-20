@@ -8,7 +8,7 @@ from api.search.provider import (
 )
 import requests
 from urllib.parse import urlencode
-from typing import List, Dict
+from typing import Any, List, Dict
 import itertools
 import dask
 from openai import OpenAI
@@ -173,13 +173,12 @@ class ESGFProvider(BaseSearchProvider):
         full_ids = [d.metadata["id"] for d in response]
         return full_ids
 
-    def get_access_paths_by_id(self, dataset_id: str) -> Dict[str, List[str]]:
+    def get_datasets_from_id(self, dataset_id: str) -> List[Dict[str, Any]]:
         """
-        returns a list of OPENDAP URLs for use in processing given a dataset.
+        returns a list of datasets for a given ID. includes mirrors.
         """
         if dataset_id == "":
             return {}
-        self.get_mirrors_for_dataset(dataset_id)
         params = urlencode(
             {
                 "type": "File",
@@ -195,11 +194,18 @@ class ESGFProvider(BaseSearchProvider):
             raise ConnectionError(
                 f"Failed to extract files from dataset via file search: {full_url} {response}"
             )
-        files = response["response"]["docs"]
-        if len(files) == 0:
+        datasets = response["response"]["docs"]
+        if len(datasets) == 0:
             raise ConnectionError(
                 f"Failed to extract files from dataset: empty list {full_url}"
             )
+        return datasets
+
+    def get_access_paths_by_id(self, dataset_id: str) -> Dict[str, List[str]]:
+        """
+        returns a list of OPENDAP URLs for use in processing given a dataset.
+        """
+        files = self.get_datasets_from_id(dataset_id)
 
         # file url responses are lists of strings with their protocols separated by |
         # e.x. https://esgf-node.example|mimetype|OPENDAP
@@ -216,6 +222,16 @@ class ESGFProvider(BaseSearchProvider):
         opendap_urls = [u[:-5] if u.endswith(".nc.html") else u for u in opendap_urls]
 
         return {"opendap": opendap_urls, "http": http_urls}
+
+    def get_metadata_for_dataset(self, dataset_id: str) -> Dict[str, Any]:
+        """
+        returns a list of OPENDAP URLs for use in processing given a dataset.
+        """
+        datasets = self.get_datasets_from_id(dataset_id)
+        if len(datasets) == 0:
+            msg = "no datasets found for given ID"
+            raise ValueError(msg)
+        return datasets[0]
 
     def get_access_paths(self, dataset: Dataset) -> AccessURLs:
         return self.get_all_access_paths_by_id(dataset.metadata["id"])

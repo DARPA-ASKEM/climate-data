@@ -45,7 +45,8 @@ async def era5_search(query: str = ""):
 @app.get("/fetch/esgf")
 async def esgf_fetch(dataset_id: str):
     urls = esgf.get_all_access_paths_by_id(dataset_id)
-    return {"dataset": dataset_id, "urls": urls}
+    metadata = esgf.get_metadata_for_dataset(dataset_id)
+    return {"dataset": dataset_id, "urls": urls, "metadata": metadata}
 
 
 @app.get(path="/subset/esgf")
