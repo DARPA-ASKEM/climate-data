@@ -76,7 +76,9 @@ Required Parameters:
 
 Optional Parameters:
   * `variable_id`: override the variable to render in the preview. 
-  * `timestamps`: plot over a list of times. much slower, work in progress 
+  * `timestamps`: plot over a list of times. 
+    * The format should be `start,end` -- two values, comma separated.
+    * Example: `1970,1979`
   * `time_index`: override time index to use. 
 
 
@@ -109,6 +111,8 @@ Optional Parameters:
         * Preserving all other fields, take every third data point from the fields `lat` and `lon`
       * `thin_factor=2&thin_fields=!time,lev`
         * Preserving all other fields, take every other data point from all fields *except* `time` and `lev`. 
+  * `variable_id`:
+    * Which variable to render in the preview. Defaults to `""`. Will attempt to choose the best relevant variable if none is specified.
 
 Output:  
 Returns a job description of the current process, queued to be completed. 
@@ -160,7 +164,8 @@ Output:
     "urls": [
         "http://esgf-data.node.example/...",
         "http://esgf-data.node.example/..."
-    ]
+    ],
+    "metadata": {}
 }
 ```
 

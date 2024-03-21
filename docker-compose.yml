@@ -10,13 +10,10 @@ services:
       - ./data:/opt/climate-search/data
     ports:
       - "8000:8000"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_ORG_ID=${OPENAI_ORG_ID}
-      - TERARIUM_USER=${TERARIUM_USER}
-      - TERARIUM_PASS=${TERARIUM_PASS}
     depends_on:
       - redis
+    env_file:
+      - .env
     entrypoint: [
       "nohup",
       "poetry",
@@ -34,12 +31,7 @@ services:
     volumes:
       - ./api:/opt/climate-search/api
     env_file:
-    - .env
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_ORG_ID=${OPENAI_ORG_ID}
-      - TERARIUM_USER=${TERARIUM_USER}
-      - TERARIUM_PASS=${TERARIUM_PASS}
+      - .env
     depends_on:
       - redis
     entrypoint: [
@@ -53,7 +45,6 @@ services:
       "-u",
       "redis://redis-climate-data:6379" 
     ]
-
   jupyter:
     build:
       context: ./
@@ -63,11 +54,6 @@ services:
       - ./data:/opt/climate-search/data
     ports:
       - "8888:8888"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_ORG_ID=${OPENAI_ORG_ID}
-      - TERARIUM_USER=${TERARIUM_USER}
-      - TERARIUM_PASS=${TERARIUM_PASS}
     env_file:
       - .env
   # minio:

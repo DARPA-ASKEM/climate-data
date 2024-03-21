@@ -22,6 +22,7 @@ def slice_and_store_dataset(
     parent_id: str,
     dataset_id: str,
     params: Dict[str, Any],
+    variable_id: str,
     **kwargs,
 ):
     job_id = kwargs["job_id"]
@@ -53,9 +54,10 @@ def slice_and_store_dataset(
             parent_id,
             job_id,
             filters.options_from_url_parameters(params),
+            variable_id,
         )
         hmi_id = post_hmi_dataset(dataset, filename)
-        return {"status": "ok", "dataset_id": hmi_id}
+        return {"status": "ok", "dataset_id": hmi_id, "filename": filename}
     except Exception as e:
         return {"status": "failed", "error": str(e), "dataset_id": ""}
     finally:

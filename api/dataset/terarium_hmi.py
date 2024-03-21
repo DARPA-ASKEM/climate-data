@@ -34,7 +34,9 @@ def generate_description(
     return string
 
 
-def enumerate_dataset_skeleton(ds: xarray.Dataset, parent_id: str) -> HMIDataset:
+def enumerate_dataset_skeleton(
+    ds: xarray.Dataset, parent_id: str, variable_id: str = ""
+) -> HMIDataset:
     """
     generates the generic body of the metadata field from a given dataset.
     this function should remain as broadly applicable as possible with the only difference
@@ -46,9 +48,11 @@ def enumerate_dataset_skeleton(ds: xarray.Dataset, parent_id: str) -> HMIDataset
     note: continues on preview not working with an exception!
     """
     try:
-        preview = render(ds)
+        start = ds.isel(time=0).time.item().year
+        end = ds.isel(time=-1).time.item().year
+        preview = render(ds, timestamps=f"{start},{end}", variable_index=variable_id)
     except Exception as e:
-        preview = ""
+        preview = f"error creating preview: {e}"
         print(e, flush=True)
     hmi_dataset = {
         "userId": "",
@@ -62,9 +66,11 @@ def enumerate_dataset_skeleton(ds: xarray.Dataset, parent_id: str) -> HMIDataset
             "dataStructure": {
                 k: {
                     "attrs": {
-                        ak: ds[k].attrs[ak].item()
-                        if isinstance(ds[k].attrs[ak], numpy.generic)
-                        else ds[k].attrs[ak]
+                        ak: (
+                            ds[k].attrs[ak].item()
+                            if isinstance(ds[k].attrs[ak], numpy.generic)
+                            else ds[k].attrs[ak]
+                        )
                         for ak in ds[k].attrs
                         # _ChunkSizes is an unserializable ndarray, safely ignorable
                         if ak != "_ChunkSizes"
@@ -75,9 +81,11 @@ def enumerate_dataset_skeleton(ds: xarray.Dataset, parent_id: str) -> HMIDataset
                 for k in ds.variables.keys()
             },
             "raw": {
-                k: ds.attrs[k].item()
-                if isinstance(ds.attrs[k], numpy.generic)
-                else ds.attrs[k]
+                k: (
+                    ds.attrs[k].item()
+                    if isinstance(ds.attrs[k], numpy.generic)
+                    else ds.attrs[k]
+                )
                 for k in ds.attrs.keys()
             },
         },
@@ -92,6 +100,7 @@ def construct_hmi_dataset(
     parent_dataset_id: str,
     subset_uuid: str,
     opts: DatasetSubsetOptions,
+    variable_id: str = "",
 ) -> HMIDataset:
     """
     generic function for turning a given subset dataset into a terarium-postable request body.

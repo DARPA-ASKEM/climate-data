@@ -9,7 +9,7 @@ from api.dataset.job_queue import create_job, fetch_job_status, get_redis
 from openai import OpenAI
 from urllib.parse import parse_qs
 from typing import List, Dict
-from api.preview.render import render_preview_for_dataset, render_preview_for_hmi
+from api.preview.render import render_preview_for_dataset
 
 app = FastAPI(docs_url="/")
 client = OpenAI()
@@ -43,20 +43,25 @@ async def era5_search(query: str = ""):
 
 
 @app.get("/fetch/esgf")
-async def esgf_fetch(dataset_id):
+async def esgf_fetch(dataset_id: str):
     urls = esgf.get_all_access_paths_by_id(dataset_id)
-    return {"dataset": dataset_id, "urls": urls}
+    metadata = esgf.get_metadata_for_dataset(dataset_id)
+    return {"dataset": dataset_id, "urls": urls, "metadata": metadata}
 
 
 @app.get(path="/subset/esgf")
 async def esgf_subset(
-    request: Request, parent_id, dataset_id, redis=Depends(get_redis)
+    request: Request,
+    parent_id: str,
+    dataset_id: str,
+    variable_id: str = "",
+    redis=Depends(get_redis),
 ):
     params = params_to_dict(request)
     urls = esgf.get_all_access_paths_by_id(dataset_id)
     job = create_job(
         func=slice_and_store_dataset,
-        args=[urls, parent_id, dataset_id, params],
+        args=[urls, parent_id, dataset_id, params, variable_id],
         redis=redis,
         queue="subset",
     )
@@ -88,16 +93,22 @@ async def era5_subset(
 
 
 @app.get(path="/preview/esgf")
-async def esgf_preview(dataset_id: str, redis=Depends(get_redis)):
-    if esgf.is_terarium_hmi_dataset(dataset_id):
-        print("terarium uuid found", flush=True)
-        job = create_job(
-            func=render_preview_for_hmi, args=[dataset_id], redis=redis, queue="preview"
-        )
-        return job
-    else:
-        urls = esgf.get_all_access_paths_by_id(dataset_id)
-        job = create_job(
-            func=render_preview_for_dataset, args=[urls], redis=redis, queue="preview"
-        )
-        return job
+async def esgf_preview(
+    dataset_id: str,
+    variable_id: str = "",
+    time_index: str = "",
+    timestamps: str = "",
+    redis=Depends(get_redis),
+):
+    dataset = (
+        dataset_id
+        if esgf.is_terarium_hmi_dataset(dataset_id)
+        else esgf.get_all_access_paths_by_id(dataset_id)
+    )
+    job = create_job(
+        func=render_preview_for_dataset,
+        args=[dataset, variable_id, time_index, timestamps],
+        redis=redis,
+        queue="preview",
+    )
+    return job
