@@ -1,5 +1,6 @@
 import xarray
 from api.dataset.models import DatasetSubsetOptions
+from api.dataset.metadata import extract_metadata, extract_esgf_specific_fields
 from api.search.providers.era5 import ERA5SearchData
 from api.settings import default_settings
 import requests
@@ -58,36 +59,10 @@ def enumerate_dataset_skeleton(
         "userId": "",
         "fileNames": [],
         "columns": [],
-        "metadata": {
-            "format": "netcdf",
+        "metadata": extract_metadata(ds)
+        | {
             "parentDatasetId": parent_id,
-            "variableId": ds.attrs.get("variable_id", ""),
             "preview": preview,
-            "dataStructure": {
-                k: {
-                    "attrs": {
-                        ak: (
-                            ds[k].attrs[ak].item()
-                            if isinstance(ds[k].attrs[ak], numpy.generic)
-                            else ds[k].attrs[ak]
-                        )
-                        for ak in ds[k].attrs
-                        # _ChunkSizes is an unserializable ndarray, safely ignorable
-                        if ak != "_ChunkSizes"
-                    },
-                    "indexes": [i for i in ds[k].indexes.keys()],
-                    "coordinates": [i for i in ds[k].coords.keys()],
-                }
-                for k in ds.variables.keys()
-            },
-            "raw": {
-                k: (
-                    ds.attrs[k].item()
-                    if isinstance(ds.attrs[k], numpy.generic)
-                    else ds.attrs[k]
-                )
-                for k in ds.attrs.keys()
-            },
         },
         "grounding": {},
     }
@@ -112,10 +87,7 @@ def construct_hmi_dataset(
     additional_fields = {
         "name": f"{dataset_name}-subset-{subset_uuid}",
         "description": generate_description(ds, dataset_id, opts),
-        "dataSourceDate": ds.attrs.get("creation_date", "UNKNOWN"),
-        "datasetUrl": ds.attrs.get("further_info_url", "UNKNOWN"),
-        "source": ds.attrs.get("source", "UNKNOWN"),
-    }
+    } | extract_esgf_specific_fields(ds)
     additional_metadata = {
         "parentDatasetId": parent_dataset_id,
         "subsetDetails": repr(opts),
