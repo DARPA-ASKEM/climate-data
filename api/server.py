@@ -98,7 +98,6 @@ async def esgf_preview(
     variable_id: str = "",
     time_index: str = "",
     timestamps: str = "",
-    analyze: bool = False,
     redis=Depends(get_redis),
 ):
     dataset = (
@@ -108,7 +107,7 @@ async def esgf_preview(
     )
     job = create_job(
         func=render_preview_for_dataset,
-        args=[dataset, variable_id, time_index, timestamps, analyze],
+        args=[dataset, variable_id, time_index, timestamps],
         redis=redis,
         queue="preview",
     )
