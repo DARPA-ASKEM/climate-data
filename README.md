@@ -72,7 +72,7 @@ The `metadata` field contains an `id` field that is used for subsequent processi
 `/preview/esgf`
 
 Required Parameters:
-  * `dataset_id`: ID of the dataset provided by search in full format. 
+  * `dataset_id`: ID of the dataset provided by search in full format **OR** a Terarium HMI dataset UUID. 
 
 Optional Parameters:
   * `variable_id`: override the variable to render in the preview. 
@@ -80,6 +80,26 @@ Optional Parameters:
     * The format should be `start,end` -- two values, comma separated.
     * Example: `1970,1979`
   * `time_index`: override time index to use. 
+  * `analyze`: *bool*, optional, default: false: if true, extracts metadata from a Terarium HMI dataset UUID attempting to gather information about the netcdf/HDF5 structure. adds a return field `metadata` containing information. 
+
+Output:  
+```json
+{
+  "previews" [
+    {
+      "year": 1850,
+      "image": "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAA"
+    },...
+  ]
+  //optional: when analyze=true
+  "metadata": {
+    "format": "netcdf",
+    "dataStructure": {...},
+    "raw": {...},
+    ...other fields
+  }
+}
+```
 
 
 #### Subset 
