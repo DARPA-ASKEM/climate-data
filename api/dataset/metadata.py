@@ -13,23 +13,26 @@ def extract_esgf_specific_fields(ds: xarray.Dataset) -> dict[str, Any]:
 
 
 def extract_metadata(ds: xarray.Dataset) -> dict[str, Any]:
-    def extract_numpy_item(x):
-        return x.item() if isinstance(x, numpy.generic) else x
+    def extract_numpy_item(field):
+        return field.item() if isinstance(field, numpy.generic) else field
 
     return {
         "format": "netcdf",
         "dataStructure": {
-            k: {
+            var_name: {
                 "attrs": {
-                    ak: extract_numpy_item(ds[k].attrs[ak])
-                    for ak in ds[k].attrs
+                    var_attribute: extract_numpy_item(ds[var_name].attrs[var_attribute])
+                    for var_attribute in ds[var_name].attrs
                     # _ChunkSizes is an unserializable ndarray, safely ignorable
-                    if ak != "_ChunkSizes"
+                    if var_attribute != "_ChunkSizes"
                 },
-                "indexes": list(ds[k].indexes.keys()),
-                "coordinates": list(ds[k].coords.keys()),
+                "indexes": list(ds[var_name].indexes.keys()),
+                "coordinates": list(ds[var_name].coords.keys()),
             }
-            for k in ds.variables.keys()
+            for var_name in ds.variables.keys()
         },
-        "raw": {k: extract_numpy_item(ds.attrs[k]) for k in ds.attrs.keys()},
+        "raw": {
+            ds_attribute: extract_numpy_item(ds.attrs[ds_attribute])
+            for ds_attribute in ds.attrs.keys()
+        },
     }

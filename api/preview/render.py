@@ -41,9 +41,8 @@ def render_preview_for_dataset(
             ds = open_remote_dataset_hmi(dataset, job_id)
             if analyze:
                 print("attempting to extract more information", flush=True)
-                extra_metadata_discovery = {
-                    "metadata": extract_metadata(ds) | extract_esgf_specific_fields(ds)
-                }
+                ds_metadata = extract_metadata(ds) | extract_esgf_specific_fields(ds)
+                extra_metadata_discovery = {"metadata": ds_metadata}
 
         if timestamps != "":
             if len(timestamps.split(",")) != 2:

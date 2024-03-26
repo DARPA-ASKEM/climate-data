@@ -55,15 +55,16 @@ def enumerate_dataset_skeleton(
     except Exception as e:
         preview = f"error creating preview: {e}"
         print(e, flush=True)
+
+    dataset_metadata = extract_metadata(ds) | {
+        "parentDatasetId": parent_id,
+        "preview": preview,
+    }
     hmi_dataset = {
         "userId": "",
         "fileNames": [],
         "columns": [],
-        "metadata": extract_metadata(ds)
-        | {
-            "parentDatasetId": parent_id,
-            "preview": preview,
-        },
+        "metadata": dataset_metadata,
         "grounding": {},
     }
     return hmi_dataset
@@ -84,17 +85,18 @@ def construct_hmi_dataset(
     hmi_dataset = enumerate_dataset_skeleton(ds, parent_dataset_id)
 
     dataset_name = dataset_id.split("|")[0]
-    additional_fields = {
+    hmi_dataset_fields = {
         "name": f"{dataset_name}-subset-{subset_uuid}",
         "description": generate_description(ds, dataset_id, opts),
-    } | extract_esgf_specific_fields(ds)
-    additional_metadata = {
+    }
+    hmi_metadata_fields = {
         "parentDatasetId": parent_dataset_id,
         "subsetDetails": repr(opts),
     }
+    esgf_metadata_fields = extract_esgf_specific_fields(ds)
 
-    hmi_dataset |= additional_fields
-    hmi_dataset["metadata"] |= additional_metadata
+    hmi_dataset |= hmi_dataset_fields
+    hmi_dataset["metadata"] |= hmi_metadata_fields | esgf_metadata_fields
 
     print(f"dataset: {dataset_name}-subset-{subset_uuid}", flush=True)
     return hmi_dataset
@@ -113,20 +115,20 @@ def construct_hmi_dataset_era5(
     hmi_dataset = enumerate_dataset_skeleton(ds, parent_dataset_id)
 
     dataset_name = dataset_id
-    additional_fields = {
+    hmi_dataset_fields = {
         "name": f"{dataset_name}-subset-{subset_uuid}",
         "description": "",
         "dataSourceDate": "",
         "datasetUrl": "",
         "source": "",
     }
-    additional_metadata = {
+    hmi_metadata_fields = {
         "parentDatasetId": parent_dataset_id,
         "subsetDetails": "",
     }
 
-    hmi_dataset |= additional_fields
-    hmi_dataset["metadata"] |= additional_metadata
+    hmi_dataset |= hmi_dataset_fields
+    hmi_dataset["metadata"] |= hmi_metadata_fields
 
     print(f"dataset: {dataset_name}-subset-{subset_uuid}", flush=True)
     return hmi_dataset
@@ -135,32 +137,32 @@ def construct_hmi_dataset_era5(
 def post_hmi_dataset(hmi_dataset: HMIDataset, filepath: str) -> str:
     terarium_auth = (default_settings.terarium_user, default_settings.terarium_pass)
 
-    r = requests.post(
+    req = requests.post(
         f"{default_settings.terarium_url}/datasets",
         json=hmi_dataset,
         auth=terarium_auth,
     )
 
-    if r.status_code != 201:
+    if req.status_code != 201:
         raise Exception(
-            f"failed to create dataset: POST /datasets: {r.status_code} {r.content}"
+            f"failed to create dataset: POST /datasets: {req.status_code} {req.content}"
         )
-    response = r.json()
+    response = req.json()
     hmi_id = response.get("id", "")
     print(f"created dataset {hmi_id}")
     if hmi_id == "":
         raise Exception(f"failed to create dataset: id not found: {response}")
 
     ds_url = f"{default_settings.terarium_url}/datasets/{hmi_id}/upload-file"
-    m = MultipartEncoder(fields={"file": ("filename", open(filepath, "rb"))})
-    r = requests.put(
+    encoder = MultipartEncoder(fields={"file": ("filename", open(filepath, "rb"))})
+    req = requests.put(
         ds_url,
-        data=m,
+        data=encoder,
         params={"filename": filepath},
-        headers={"Content-Type": m.content_type},
+        headers={"Content-Type": encoder.content_type},
         auth=terarium_auth,
     )
-    if r.status_code != 200:
-        raise Exception(f"failed to upload file: {ds_url}: {r.status_code}")
+    if req.status_code != 200:
+        raise Exception(f"failed to upload file: {ds_url}: {req.status_code}")
 
     return hmi_id
