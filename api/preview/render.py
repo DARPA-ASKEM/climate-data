@@ -1,9 +1,11 @@
 import datetime
 import io
 import base64
+from typing import Any
 from api.search.provider import AccessURLs
 import cartopy.crs as ccrs
 import xarray
+from api.dataset.metadata import extract_esgf_specific_fields, extract_metadata
 from matplotlib import pyplot as plt
 from api.dataset.remote import (
     cleanup_potential_artifacts,
@@ -25,16 +27,23 @@ def render_preview_for_dataset(
     variable_index: str = "",
     time_index: str = "",
     timestamps: str = "",
+    analyze: bool = False,
     **kwargs,
 ):
     job_id = kwargs["job_id"]
     try:
         ds: xarray.Dataset | None = None
+        extra_metadata_discovery: dict[str, Any] = {}
         # AccessURLs list or UUID str -- UUID str is terarium handle.
         if isinstance(dataset, list):
             ds = open_dataset(dataset, job_id)
         elif isinstance(dataset, str):
             ds = open_remote_dataset_hmi(dataset, job_id)
+            if analyze:
+                print("attempting to extract more information", flush=True)
+                ds_metadata = extract_metadata(ds) | extract_esgf_specific_fields(ds)
+                extra_metadata_discovery = {"metadata": ds_metadata}
+
         if timestamps != "":
             if len(timestamps.split(",")) != 2:
                 return {
@@ -45,7 +54,7 @@ def render_preview_for_dataset(
         except KeyError as e:
             return {"error": f"{e}"}
         cleanup_potential_artifacts(job_id)
-        return {"previews": png}
+        return {"previews": png} | extra_metadata_discovery
     except IOError as e:
         return {"error": f"upstream hosting is likely having a problem. {e}"}
 
