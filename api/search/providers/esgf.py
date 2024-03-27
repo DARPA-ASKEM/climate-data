@@ -311,11 +311,12 @@ class ESGFProvider(BaseSearchProvider):
 
         full_url = f"{default_settings.esgf_url}/search?{encoded_string}"
         r = requests.get(full_url)
-        response = r.json()
         if r.status_code != 200:
+            error = str(r.content)
             raise ConnectionError(
-                f"Failed to search against ESGF node: {full_url} {r.status_code} {response}"
+                f"Failed to search against ESGF node: {full_url}: error from node upstream is: {r.status_code} {error}"
             )
+        response = r.json()
 
         # parallel over datasets, but delay fetching url until needed
         return dask.compute(
