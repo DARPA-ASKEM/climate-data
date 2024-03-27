@@ -32,7 +32,10 @@ async def job_status(job_id: str, redis=Depends(get_redis)):
 
 @app.get("/search/esgf")
 async def esgf_search(query: str = "", page: int = 1, refresh_cache=False):
-    datasets = esgf.search(query, page, refresh_cache)
+    try:
+        datasets = esgf.search(query, page, refresh_cache)
+    except Exception as e:
+        return {"error": f"failed to fetch datasets: {e}"}
     return {"results": datasets}
 
 
