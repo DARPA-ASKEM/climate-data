@@ -6,7 +6,7 @@ import os
 
 class Settings(BaseSettings):
     esgf_url: str = Field(
-        os.environ.get("ESGF_URL", "https://esgf-node.llnl.gov/esg-search")
+        os.environ.get("ESGF_URL", "https://esgf-node.ornl.gov/esg-search")
     )
     esgf_openid: Tuple[str, str] = Field(
         (os.environ.get("ESGF_OPENID_USER", ""), os.environ.get("ESGF_OPENID_PASS", ""))

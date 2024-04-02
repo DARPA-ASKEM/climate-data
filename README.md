@@ -41,31 +41,85 @@ By default, climate-data will search all possible given mirrors for reliability 
 `/search/esgf`
 
 Required Parameters:
-  * `query`: Natural language string with search terms to retrieve datasets for. 
+  * `query`: Natural language string (OR keywords/raw Lucene query, see: optional parameters) with search terms to retrieve datasets for. 
 
-Example: `/search/esgf?query=historical eastward wind 100 km cesm2 r11i1p1f1 cfday`
+Optional Parameters:
+  * `keywords`: Pass a keyword-oriented search to ESGF. Keyword-oriented searches are not passed to the LLM. Listing keywords or providing a raw Lucene query is supported.
+
+##### Natural Language Search Example:  
+
+Search: "find me datasets about max air temperature monthly with a community earth model and ssp3 7.0"
+
+URL: `/search/esgf?query=find me datasets about max air temperature monthly with a community earth model and ssp3 7.0`  
 
 Output:  
 ```json
 {
-    "results": [
-        {
-            "metadata": {
-                "id": "CMIP6.CMIP.NCAR.CESM2.historical.r11i1p1f1.CFday.ua.gn.v20190514|aims3.llnl.gov",
-                "version": "20190514"...
-            }
-        }, ...
-    ]
+  "query": {
+    "raw": "(Daily Maximum Near-Surface Air Temperature OR Near-Surface Air Temperature) AND (tasmax OR tas) AND CESM2 AND ssp370 AND NCAR AND mon",
+    "search_terms": {
+      "variable_descriptions": [
+        "Daily Maximum Near-Surface Air Temperature",
+        "Near-Surface Air Temperature",
+        ""
+      ],
+      "variable": [
+        "tasmax",
+        "tas",
+        ""
+      ],
+      "source_id": "CESM2",
+      "experiment_id": "ssp370",
+      "nominal_resolution": "",
+      "institution_id": "NCAR",
+      "variant_label": "",
+      "frequency": "mon"
+    }
+  },
+  "results": [
+    {
+      "metadata": {
+        "id": "CMIP6.ScenarioMIP.NCAR.CESM2-WACCM.ssp370.r1i1p1f1.Amon.tas.gn.v20190815|esgf-data04.diasjp.net",
+        "version": "20190815"
+      }, ... 
+    }
+  ]
+}
+```  
+
+##### Keyword Search Example:   
+
+Search: "historical eastward wind 100 km cesm2 r11i1p1f1 cfday"
+
+URL: `/search/esgf?keywords=True&query=historical eastward wind 100 km cesm2 r11i1p1f1 cfday`
+
+Output:  
+```json
+{
+  "query": {
+    "original": "historical eastward wind 100 km cesm2 r11i1p1f1 cfday",
+    "raw": "historical AND eastward AND wind AND 100 AND km AND cesm2 AND r11i1p1f1 AND cfday"
+  },
+  "results": [
+    {
+      "metadata": {
+        "id": "CMIP6.CMIP.NCAR.CESM2.historical.r11i1p1f1.CFday.ua.gn.v20190514|aims3.llnl.gov",
+        "version": "20190514"...
+      }
+    }, ...
+  ]
 }
 ```
 
 `results` is a list of datasets, sorted by relevance. 
 
-Each dataset contains a `metadata` field. 
+Each dataset contains a `metadata` field and a `query` field. 
 
 `metadata` contains all of the stored metadata for the data set, provided by ESGF, such as experiment name, title, variables, geospatial coordinates, time, frequency, resolution, and more. 
 
-The `metadata` field contains an `id` field that is used for subsequent processing and lookups, containing the full dataset ID with revision and node information, such as: `CMIP6.CMIP.NCAR.CESM2.historical.r11i1p1f1.CFday.ua.gn.v20190514|esgf-data.ucar.edu`
+The `metadata` field contains an `id` field that is used for subsequent processing and lookups, containing the full dataset ID with revision and node information, such as: `CMIP6.CMIP.NCAR.CESM2.historical.r11i1p1f1.CFday.ua.gn.v20190514|esgf-data.ucar.edu`  
+
+`query` contains information about the search processing itself. One subfield is always present: `raw`, containing what is directly passed to the ESGF node. `search_terms` is an object mapping facet keys to LLM keywords for natural language searches. `original` is present on a keyword search that was converted to a Lucene query.  
 
 #### Preview
 
