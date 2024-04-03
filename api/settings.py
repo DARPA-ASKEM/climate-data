@@ -20,7 +20,7 @@ DEFAULT_ESGF_FALLBACKS = [
 
 class Settings(BaseSettings):
     esgf_url: str = Field(
-        os.environ.get("ESGF_URL", "https://esgf-node.lln.gov/esg-search")
+        os.environ.get("ESGF_URL", "https://esgf-node.llnl.gov/esg-search")
     )
     esgf_fallbacks: str = Field(
         os.environ.get("ESGF_FALLBACKS", ",".join(DEFAULT_ESGF_FALLBACKS))

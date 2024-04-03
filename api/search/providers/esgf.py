@@ -164,8 +164,10 @@ class ESGFProvider(BaseSearchProvider):
 
     def get_all_access_paths_by_id(self, dataset_id: str) -> AccessURLs:
         return [
-            self.get_access_paths_by_id(id)
-            for id in self.get_mirrors_for_dataset(dataset_id)
+            self.with_all_available_mirrors(self.get_access_paths_by_id, id)
+            for id in self.with_all_available_mirrors(
+                self.get_mirrors_for_dataset, dataset_id
+            )
         ]
 
     def get_mirrors_for_dataset(self, dataset_id: str) -> List[str]:
@@ -189,7 +191,8 @@ class ESGFProvider(BaseSearchProvider):
                 "limit": 200,
             }
         )
-        full_url = f"{default_settings.esgf_url}/search?{params}"
+        base_url = self.get_esgf_url_with_current_mirror()
+        full_url = f"{base_url}?{params}"
         r = requests.get(full_url)
         response = r.json()
         if r.status_code != 200:
