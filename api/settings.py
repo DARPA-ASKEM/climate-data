@@ -3,10 +3,27 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 import os
 
+DEFAULT_ESGF_FALLBACKS = [
+    "https://esgf-node.ornl.gov/esg-search",
+    "https://ds.nccs.nasa.gov/esg-search",
+    "https://dpesgf03.nccs.nasa.gov/esg-search",
+    "https://esg-dn1.nsc.liu.se/esg-search",
+    "https://esg-dn2.nsc.liu.se/esg-search",
+    "https://esg-dn3.nsc.liu.se/esg-search",
+    "https://cmip.bcc.cma.cn/esg-search",
+    "http://cmip.fio.org.cn/esg-search",
+    "http://cordexesg.dmi.dk/esg-search",
+    "http://data.meteo.unican.es/esg-search",
+    "http://esg-cccr.tropmet.res.in/esg-search",
+]
+
 
 class Settings(BaseSettings):
     esgf_url: str = Field(
         os.environ.get("ESGF_URL", "https://esgf-node.llnl.gov/esg-search")
+    )
+    esgf_fallbacks: str = Field(
+        os.environ.get("ESGF_FALLBACKS", ",".join(DEFAULT_ESGF_FALLBACKS))
     )
     esgf_openid: Tuple[str, str] = Field(
         (os.environ.get("ESGF_OPENID_USER", ""), os.environ.get("ESGF_OPENID_PASS", ""))

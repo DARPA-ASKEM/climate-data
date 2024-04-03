@@ -15,8 +15,6 @@ app = FastAPI(docs_url="/")
 client = OpenAI()
 
 esgf = ESGFProvider(client)
-esgf.initialize_embeddings()
-
 era5 = ERA5Provider(client)
 
 
@@ -31,12 +29,12 @@ async def job_status(job_id: str, redis=Depends(get_redis)):
 
 
 @app.get("/search/esgf")
-async def esgf_search(query: str = "", page: int = 1, refresh_cache=False):
+async def esgf_search(query: str = "", page: int = 1, keywords: bool = False):
     try:
-        datasets = esgf.search(query, page, refresh_cache)
+        datasets = esgf.search(query, page, keywords)
     except Exception as e:
         return {"error": f"failed to fetch datasets: {e}"}
-    return {"results": datasets}
+    return datasets
 
 
 @app.get("/search/era5")
