@@ -89,7 +89,41 @@ class ESGFProvider(BaseSearchProvider):
     def __init__(self, openai_client):
         print("initializing esgf search provider")
         self.client: OpenAI = openai_client
-        self.get_facet_possiblities()
+        self.search_mirrors = [
+            default_settings.esgf_url,
+            *default_settings.esgf_fallbacks.split(","),
+        ]
+        self.current_mirror_index = 0
+        self.retries = 0
+        self.max_retries = len(self.search_mirrors)
+
+        self.with_all_available_mirrors(self.get_facet_possiblities)
+
+    def increment_mirror(self):
+        self.current_mirror_index += 1
+        self.current_mirror_index = self.current_mirror_index % len(self.search_mirrors)
+
+    def with_all_available_mirrors(self, func, *args, **kwargs) -> Any:
+        self.retries = 0
+        return_value = None
+        while self.retries < self.max_retries:
+            try:
+                return_value = func(*args, **kwargs)
+                break
+            except Exception as e:
+                print(
+                    f"failed to run: retry {self.retries}, mirror: {self.search_mirrors[self.current_mirror_index]}",
+                    flush=True,
+                )
+                self.increment_mirror()
+                self.retries += 1
+                if self.retries >= self.max_retries:
+                    raise Exception(f"failed after {self.retries} retries: {e}")
+        return return_value
+
+    def get_esgf_url_with_current_mirror(self) -> str:
+        mirror = self.search_mirrors[self.current_mirror_index]
+        return f"{mirror}/search"
 
     def get_facet_possiblities(self):
         query = {
@@ -98,8 +132,8 @@ class ESGFProvider(BaseSearchProvider):
             "limit": "0",
             "format": "application/solr+json",
         }
-        full_url = f"{default_settings.esgf_url}/search?"
-        response = requests.get(full_url, params=query)
+        base_url = self.get_esgf_url_with_current_mirror()
+        response = requests.get(base_url, params=query)
         if response.status_code >= 300:
             msg = f"failed to fetch available facets: {response.status_code}, {response.content}"
             raise Exception(msg)
@@ -130,8 +164,10 @@ class ESGFProvider(BaseSearchProvider):
 
     def get_all_access_paths_by_id(self, dataset_id: str) -> AccessURLs:
         return [
-            self.get_access_paths_by_id(id)
-            for id in self.get_mirrors_for_dataset(dataset_id)
+            self.with_all_available_mirrors(self.get_access_paths_by_id, id)
+            for id in self.with_all_available_mirrors(
+                self.get_mirrors_for_dataset, dataset_id
+            )
         ]
 
     def get_mirrors_for_dataset(self, dataset_id: str) -> List[str]:
@@ -155,7 +191,8 @@ class ESGFProvider(BaseSearchProvider):
                 "limit": 200,
             }
         )
-        full_url = f"{default_settings.esgf_url}/search?{params}"
+        base_url = self.get_esgf_url_with_current_mirror()
+        full_url = f"{base_url}?{params}"
         r = requests.get(full_url)
         response = r.json()
         if r.status_code != 200:
@@ -259,7 +296,9 @@ class ESGFProvider(BaseSearchProvider):
                 )
             ]
         )
-        datasets = self.run_esgf_dataset_query(query, page, options={})
+        datasets = self.with_all_available_mirrors(
+            self.run_esgf_dataset_query, query, page, options={}
+        )
         return {
             "query": {"raw": query, "search_terms": search_terms},
             "results": datasets,
@@ -315,7 +354,8 @@ class ESGFProvider(BaseSearchProvider):
             | options
         )
 
-        full_url = f"{default_settings.esgf_url}/search?{encoded_string}"
+        base_url = self.get_esgf_url_with_current_mirror()
+        full_url = f"{base_url}?{encoded_string}"
         r = requests.get(full_url)
         if r.status_code != 200:
             error = str(r.content)
