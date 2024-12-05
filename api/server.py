@@ -102,11 +102,7 @@ async def esgf_preview(
     analyze: bool = False,
     redis=Depends(get_redis),
 ):
-    dataset = (
-        dataset_id
-        if esgf.is_terarium_hmi_dataset(dataset_id)
-        else esgf.get_all_access_paths_by_id(dataset_id)
-    )
+    dataset = esgf.get_all_access_paths_by_id(dataset_id)
     job = create_job(
         func=render_preview_for_dataset,
         args=[dataset, variable_id, time_index, timestamps, analyze],

@@ -138,24 +138,3 @@ def cleanup_potential_artifacts(job_id):
         for file in glob.glob(os.path.join(temp_directory, "*.nc")):
             os.remove(file)
         os.removedirs(temp_directory)
-
-
-def open_remote_dataset_hmi(dataset_id: str, job_id: str) -> xarray.Dataset:
-    base_url = f"{default_settings.terarium_url}/datasets/{dataset_id}"
-    auth = (default_settings.terarium_user, default_settings.terarium_pass)
-    response = requests.get(base_url, auth=auth)
-    if response.status_code != 200:
-        errors = {
-            204: "does not exist (204)",
-            400: "malformed request (400)",
-            500: "upstream error (500)",
-            401: "auth error (401)",
-        }
-        msg = errors.get(response.status_code, f"unknown error {response.status_code}")
-        raise IOError(f"Dataset not found: {msg}")
-    filenames = response.json().get("fileNames", [])
-    if len(filenames) == 0:
-        raise IOError("Dataset has no associated files")
-    filenames = [f"{base_url}/download-file?filename={f}" for f in filenames]
-
-    return open_remote_dataset_http(filenames, job_id, auth)

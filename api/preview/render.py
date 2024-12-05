@@ -10,7 +10,6 @@ from matplotlib import pyplot as plt
 from api.dataset.remote import (
     cleanup_potential_artifacts,
     open_dataset,
-    open_remote_dataset_hmi,
 )
 
 
@@ -37,12 +36,6 @@ def render_preview_for_dataset(
         # AccessURLs list or UUID str -- UUID str is terarium handle.
         if isinstance(dataset, list):
             ds = open_dataset(dataset, job_id)
-        elif isinstance(dataset, str):
-            ds = open_remote_dataset_hmi(dataset, job_id)
-            if analyze:
-                print("attempting to extract more information", flush=True)
-                ds_metadata = extract_metadata(ds) | extract_esgf_specific_fields(ds)
-                extra_metadata_discovery = {"metadata": ds_metadata}
 
         if timestamps != "":
             if len(timestamps.split(",")) != 2:

@@ -1,7 +1,6 @@
 from api.search.providers.era5 import ERA5SearchData
 import xarray
 from typing import Dict, List
-from api.dataset.terarium_hmi import construct_hmi_dataset_era5
 from api.dataset.remote import cleanup_potential_artifacts
 import os
 import cdsapi
@@ -122,17 +121,8 @@ def era5_subset_job(
             "error": f"failed to download era5 dataset. {e}",
         }
     print(f"bytes: {ds.nbytes}", flush=True)
-    try:
-        hmi_id = construct_hmi_dataset_era5(
-            ds,
-            "",
-            parent_id,
-            job_id,
-            data,
-        )
-        return {"status": "ok", "dataset_id": hmi_id}
-    except Exception as e:
-        return {"status": "failed", "error": str(e), "dataset_id": ""}
-    finally:
-        cleanup_potential_artifacts(job_id)
-        os.remove(filename)
+
+    # todo -- necessary without hmi?
+
+    cleanup_potential_artifacts(job_id)
+    os.remove(filename)

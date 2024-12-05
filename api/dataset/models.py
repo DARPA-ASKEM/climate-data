@@ -5,7 +5,6 @@ from typing import Dict, List
 from pydantic import BaseModel, Field
 
 
-# for hmi-server specialization
 class DatasetType(Enum):
     esgf = "esgf"
     era5 = "era5"

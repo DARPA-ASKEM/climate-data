@@ -1,7 +1,6 @@
 ---
-version: '3'
 services:
-  service:
+  climate:
     build:
       context: ./
       dockerfile: ./docker/server/Dockerfile
@@ -24,6 +23,8 @@ services:
       "--host",
       "0.0.0.0"
     ]
+    networks:
+      - climate 
   rq-worker:
     build:
       context: ./
@@ -45,17 +46,8 @@ services:
       "-u",
       "redis://redis-climate-data:6379" 
     ]
-  jupyter:
-    build:
-      context: ./
-      dockerfile: ./docker/jupyter/Dockerfile
-    volumes:
-      - ./api:/opt/climate-search/api
-      - ./data:/opt/climate-search/data
-    ports:
-      - "8888:8888"
-    env_file:
-      - .env
+    networks:
+      - climate 
   # minio:
   #   build:
   #     context: ./
@@ -71,3 +63,9 @@ services:
   redis:
     container_name: redis-climate-data
     image: redis
+    networks:
+      - climate 
+
+networks:
+  climate:
+    name: climate_network

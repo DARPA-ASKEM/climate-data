@@ -40,12 +40,5 @@ class Settings(BaseSettings):
     bucket_name: str = Field(
         os.environ.get("MINIO_BUCKET_NAME", "climate-data-test-bucket")
     )
-
-    terarium_url: str = Field(
-        os.environ.get("TERARIUM_URL", "https://server.staging.terarium.ai")
-    )
-    terarium_user: str = Field(os.environ.get("TERARIUM_USER", ""))
-    terarium_pass: str = Field(os.environ.get("TERARIUM_PASS", ""))
-
-
+    
 default_settings = Settings()
